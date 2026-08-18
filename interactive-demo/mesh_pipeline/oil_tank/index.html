@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>储油罐几何生成管线 · Wireframe 分步演示</title>
+<style>
+  :root {
+    --bg: #0e1114;
+    --panel: #161b20;
+    --line: #2a323a;
+    --text: #d6dde4;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --shell: #7ec8e3;
+    --seam: #e8c27a;
+    --weld: #f0a070;
+    --nozzle: #9ad7a0;
+    --girder: #d4a5e8;
+    --roof: #e8b4a0;
+    --stair: #a8c4e0;
+    --bund: #6a7a6e;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(300px, 400px) 1fr;
+    height: 100%;
+  }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh; }
+  }
+  .side {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow: auto;
+    padding: 22px 20px 40px;
+  }
+  h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; }
+  .sub code {
+    font-size: 11px; color: var(--accent);
+    background: #0e1114; padding: 1px 5px; border-radius: 3px;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 7px 12px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: #2a3428; border-color: #4a6348; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .step-list { list-style: none; margin: 0; padding: 0; }
+  .step-list li {
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .step-list li:hover { border-color: #3d4a55; }
+  .step-list li.active { border-color: var(--accent); background: #1c2228; }
+  .step-list .n { display: inline-block; width: 1.6em; color: var(--accent); font-weight: 600; }
+  .step-list .title { font-weight: 600; }
+  .step-list .blurb { display: none; margin-top: 8px; color: var(--muted); font-size: 12.5px; }
+  .step-list li.active .blurb { display: block; }
+  .formula {
+    margin-top: 8px; padding: 8px 10px; background: #0e1114; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px; color: #b8c4ce; white-space: pre-wrap;
+  }
+  .legend {
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px;
+  }
+  .viewport { position: relative; background: #0a0c0e; min-height: 320px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud {
+    position: absolute; left: 16px; top: 14px; right: 16px;
+    pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  }
+  .badge {
+    background: rgba(14,17,20,0.82); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 14px; max-width: 460px;
+  }
+  .badge h2 { margin: 0 0 4px; font-size: 14px; color: #fff; font-weight: 600; }
+  .badge p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .hint {
+    font-size: 11px; color: var(--muted);
+    background: rgba(14,17,20,0.7); padding: 6px 10px; border-radius: 4px;
+  }
+  .err {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; padding: 24px; text-align: center; color: #e8a0a0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>储油罐几何 · 分步 Wireframe</h1>
+    <p class="sub">
+      复现 <code>level_refinery.js</code> → <code>buildTanks()</code>
+      （T1：r=14.5 m · h=12.5 m 浮顶原油罐）。演示按比例缩小。
+      拖拽旋转，滚轮缩放。
+    </p>
+    <div class="controls">
+      <button type="button" id="btnPrev">上一步</button>
+      <button type="button" id="btnNext" class="primary">下一步</button>
+      <button type="button" id="btnPlay">自动播放</button>
+      <button type="button" id="btnReset">重置视角</button>
+    </div>
+    <ol class="step-list" id="steps"></ol>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--shell)"></span>板层筒壁</div>
+      <div><span class="swatch" style="background:var(--seam)"></span>水平焊缝环</div>
+      <div><span class="swatch" style="background:var(--weld)"></span>竖向对接焊</div>
+      <div><span class="swatch" style="background:var(--nozzle)"></span>管嘴 / 加强垫</div>
+      <div><span class="swatch" style="background:var(--girder)"></span>抗风圈 / 走道</div>
+      <div><span class="swatch" style="background:var(--roof)"></span>屋顶锥壳</div>
+      <div><span class="swatch" style="background:var(--stair)"></span>螺旋梯</div>
+      <div><span class="swatch" style="background:var(--bund)"></span>围堰墙</div>
+    </div>
+  </aside>
+  <main class="viewport" id="viewport">
+    <div class="hud">
+      <div class="badge">
+        <h2 id="hudTitle">—</h2>
+        <p id="hudDesc">—</p>
+      </div>
+      <div class="hint">拖拽旋转 · 滚轮缩放 · ← → 切换步骤</div>
+    </div>
+  </main>
+</div>
+
+<script src="../../vendor/three.global.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  if (!window.THREE) {
+    document.getElementById('viewport').innerHTML =
+      '<div class="err">无法加载 <code>../../vendor/three.global.js</code>。<br/>' +
+      '请从仓库根目录用 HTTP 打开<br/><code>survey/mesh_pipeline/oil_tank/</code></div>';
+    return;
+  }
+
+  var THREE = window.THREE;
+
+  // --------------------------------------------------------------------------
+  // Viewing-scale params (game T1: r=14.5, h=12.5 → ~1/3)
+  // --------------------------------------------------------------------------
+  var T = {
+    r: 5.0,
+    h: 4.35,
+    courseH: 0.70,   // game: 2.0 m courses
+    seg: 36,
+    stair: 0.55,
+    bundPad: 2.8,
+    bundH: 0.65,
+    name: 'T1'
+  };
+  T.nc = Math.max(4, Math.round(T.h / T.courseH));
+
+  function courseRadius(c) {
+    // thicker at bottom: each course steps out 6 mm in game → scaled
+    return T.r + (T.nc - c) * 0.002;
+  }
+
+  function courseY(c) {
+    return T.h * (c / T.nc);
+  }
+
+  // ---- geometry helpers -----------------------------------------------------
+  function lineGeo(points, closed) {
+    var arr = [], i, n = points.length;
+    for (i = 0; i < n - 1; i++) {
+      arr.push(points[i][0], points[i][1], points[i][2],
+        points[i + 1][0], points[i + 1][1], points[i + 1][2]);
+    }
+    if (closed && n > 2) {
+      arr.push(points[n - 1][0], points[n - 1][1], points[n - 1][2],
+        points[0][0], points[0][1], points[0][2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  function lines(geo, color, opacity) {
+    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: color, transparent: true, opacity: opacity === undefined ? 1 : opacity
+    }));
+  }
+
+  function wireMesh(geo, color, opacity) {
+    return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color: color, wireframe: true, transparent: true,
+      opacity: opacity === undefined ? 0.9 : opacity, depthWrite: false,
+      side: THREE.DoubleSide
+    }));
+  }
+
+  function circlePts(cx, cy, cz, r, seg) {
+    var pts = [], i;
+    for (i = 0; i <= seg; i++) {
+      var a = i / seg * Math.PI * 2;
+      pts.push([cx + Math.cos(a) * r, cy, cz + Math.sin(a) * r]);
+    }
+    return pts;
+  }
+
+  function openCylWire(rBot, rTop, y0, y1, seg) {
+    // side quads as line segments
+    var arr = [], i;
+    for (i = 0; i < seg; i++) {
+      var a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2;
+      var c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+      var b0 = [c0 * rBot, y0, s0 * rBot], b1 = [c1 * rBot, y0, s1 * rBot];
+      var t0 = [c0 * rTop, y1, s0 * rTop], t1 = [c1 * rTop, y1, s1 * rTop];
+      // verticals + diagonals + rings
+      arr.push(b0[0], b0[1], b0[2], t0[0], t0[1], t0[2]);
+      arr.push(b0[0], b0[1], b0[2], b1[0], b1[1], b1[2]);
+      arr.push(t0[0], t0[1], t0[2], t1[0], t1[1], t1[2]);
+      arr.push(b0[0], b0[1], b0[2], t1[0], t1[1], t1[2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  function boxWire(w, h, d) {
+    var hw = w * 0.5, hh = h * 0.5, hd = d * 0.5;
+    var c = [
+      [-hw, -hh, -hd], [hw, -hh, -hd], [hw, -hh, hd], [-hw, -hh, hd],
+      [-hw, hh, -hd], [hw, hh, -hd], [hw, hh, hd], [-hw, hh, hd]
+    ];
+    var e = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    var arr = [], i;
+    for (i = 0; i < e.length; i++) {
+      var a = c[e[i][0]], b = c[e[i][1]];
+      arr.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  // --------------------------------------------------------------------------
+  // Steps
+  // --------------------------------------------------------------------------
+  var STEPS = [
+    {
+      id: 'spec',
+      title: '① 规格与轴线',
+      hud: '巨大平滑曲面——先有半径与高度，还没有三角形',
+      blurb: '炼油厂罐区：两座 29 m 原油罐 + 一座 20 m 产品罐。T1 参数 r=14.5、h=12.5。演示约 1/3 比例。轴线是竖直圆柱轴；底面落在围堰地坪 floorY。',
+      formula: 'TANKS.T1 = { r:14.5, h:12.5, … }\nnc = max(4, round(h / 2.0))  // 板层数\nseg = 40                     // 径向分段'
+    },
+    {
+      id: 'courses',
+      title: '② 板层筒壁 courses',
+      hud: '按 2 m 板层叠 truncated 圆柱——不是一根光筒',
+      blurb: '真实储罐下厚上薄。每层半径 rr = r + (nc−c)·0.006，略向外台阶。层间阴影线是 29 m 灰圆柱唯一的尺度感。open 圆柱（无顶底盖）。',
+      formula: 'for c in 0..nc-1:\n  y0,y1 = floorY + h·(c/nc), …\n  rr = r + (nc−c)·0.006\n  cyl(rr−0.006, rr, y1−y0, open=true)'
+    },
+    {
+      id: 'hseams',
+      title: '③ 水平焊缝环',
+      hud: '板层接缝：凸起焊帽 + 热影响带宽',
+      blurb: '早期 12×35 mm 的缝在 47 m 外不够一个像素。现用 rr+0.045 半径、0.09 m 高的凸环。paint=seam 与罐壁同材质桶但不同顶点色。',
+      formula: 'seam: cyl(rr+0.045, rr+0.045, 0.090)\n      at y = y0 + 0.02\n→ 水平尺度线'
+    },
+    {
+      id: 'vwelds',
+      title: '④ 竖向对接焊',
+      hud: '卷板竖缝 + 隔层错缝——读出“钢板”而不是挤出管',
+      blurb: '仅有水平缝只有一个尺度轴。竖缝按 ~11 m 板宽均分；奇数层错半板，避免竖缝贯通成裂纹路径。boxR 贴在壳外。',
+      formula: 'nvw = max(6, round(2πr / 11))\nang = (vw + (c%2)·0.5) / nvw · 2π\nbox(0.10, courseH−0.14, 0.075)\n  at (cos·(rr+0.03), …)'
+    },
+    {
+      id: 'nozzles',
+      title: '⑤ 底部管嘴 bosses',
+      hud: '眼高处唯一细节：加强垫 + 短管 + 法兰螺栓',
+      blurb: '下两层：排水、抽水、搅拌器、备用口。加强垫是扁圆柱贴壳；短管 tube 伸出；法兰环 + 6 颗螺栓。hero3 把壳推到 30 m，没有这些就是光面。',
+      formula: 'pad:  cyl(nzr·2.4, …, 0.05) 贴壳\nstub: tube(壳 → 壳外 0.40)\nflange + 6× bolt cyl'
+    },
+    {
+      id: 'girder',
+      title: '⑥ 抗风圈 wind girder',
+      hud: '顶部突出环廊——大型储罐最易辨认的特征',
+      blurb: '近顶 annulus 格栅走道 + railRing + 18 根斜撑 strut 回接到壳。几何进 grate/struct/rail 桶，不是 tank 桶。',
+      formula: 'ring(r, r+0.95) at h−1.30\nrailRing(r+0.90)\n18× strut(壳 → 走道外缘)'
+    },
+    {
+      id: 'roof',
+      title: '⑦ 屋顶锥壳 + 附件',
+      hud: '浅锥顶 + 量油口 / 通气 / 泡沫管 / 内圈栏杆',
+      blurb: 'cyl(r·0.10 → r, 高 1.35) 做浅锥；中心小环封口。钢附件：量油口、通气筒、泡沫灌注管、内沿护栏。',
+      formula: 'cyl(r·0.1, r, 1.35) at roofY+0.62\nring(0, r·0.1) 封顶\n+ hatch / vents / foam tubes'
+    },
+    {
+      id: 'stair',
+      title: '⑧ 螺旋梯 spiral',
+      hud: '围堰地坪 → 抗风圈：46 级格栅踏步',
+      blurb: '半径 r+0.62，一圈螺旋。每级 grate 踏板 + stringer + 外栏杆；每 3 级立柱 + 回壳撑杆。60 m 外仍能读出“这是罐”。',
+      formula: 'sr = r + 0.62\nfor st in 0..45:\n  a = stair + (st/46)·2π\n  y = 0.25 + (h−1.75)·(st/46)\n  boxR grate + rail tube'
+    },
+    {
+      id: 'assemble',
+      title: '⑨ 围堰 + 完整拼装',
+      hud: 'bund 墙 + 罐壳 + 走道 + 梯 → 罐区空间',
+      blurb: '四边钢筋混凝土围堰（模板板 + 拉杆塞 + 压顶），东侧跨步梯可进入。罐几何进 tank 材质桶（painted_metal，低 meso/detail，尺度靠真实几何）。',
+      formula: 'SURF.tank → painted_metal\nuv 2.90 · meso 0.10 · detail 0.16\n尺度靠板层/焊缝/抗风圈，不靠噪声'
+    }
+  ];
+
+  // --------------------------------------------------------------------------
+  // Scene
+  // --------------------------------------------------------------------------
+  var viewport = document.getElementById('viewport');
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x0a0c0e, 1);
+  viewport.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+
+  var root = new THREE.Group();
+  root.position.set(0, -T.h * 0.15, 0);
+  scene.add(root);
+
+  var stepRoot = new THREE.Group();
+  root.add(stepRoot);
+
+  var grid = new THREE.GridHelper(22, 22, 0x243038, 0x1a2228);
+  grid.position.y = 0;
+  root.add(grid);
+
+  var orbit = {
+    target: new THREE.Vector3(0, T.h * 0.45, 0),
+    spherical: new THREE.Spherical(16, 1.05, 0.75),
+    dragging: false, px: 0, py: 0
+  };
+  function syncCam() {
+    camera.position.setFromSpherical(orbit.spherical);
+    camera.position.add(orbit.target);
+    camera.lookAt(orbit.target);
+  }
+  syncCam();
+
+  viewport.addEventListener('pointerdown', function (e) {
+    orbit.dragging = true; orbit.px = e.clientX; orbit.py = e.clientY;
+    viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointerup', function () { orbit.dragging = false; });
+  viewport.addEventListener('pointermove', function (e) {
+    if (!orbit.dragging) return;
+    var dx = e.clientX - orbit.px, dy = e.clientY - orbit.py;
+    orbit.px = e.clientX; orbit.py = e.clientY;
+    orbit.spherical.theta -= dx * 0.005;
+    orbit.spherical.phi = Math.max(0.12, Math.min(Math.PI - 0.12, orbit.spherical.phi + dy * 0.005));
+    syncCam();
+  });
+  viewport.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    orbit.spherical.radius = Math.max(6, Math.min(40, orbit.spherical.radius * (1 + e.deltaY * 0.001)));
+    syncCam();
+  }, { passive: false });
+
+  function clearStep() {
+    while (stepRoot.children.length) {
+      var c = stepRoot.children[0];
+      stepRoot.remove(c);
+      c.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); });
+          else o.material.dispose();
+        }
+      });
+    }
+  }
+
+  // ---- builders for each visual layer --------------------------------------
+  function addAxis() {
+    stepRoot.add(lines(lineGeo([[0, 0, 0], [0, T.h + 0.8, 0]]), 0xe8c27a, 0.9));
+    stepRoot.add(lines(lineGeo(circlePts(0, 0, 0, T.r, 64), true), 0xe8c27a, 0.45));
+  }
+
+  function addCourses(opacity) {
+    var c;
+    for (c = 0; c < T.nc; c++) {
+      var y0 = courseY(c), y1 = courseY(c + 1);
+      var rr = courseRadius(c);
+      var g = openCylWire(rr - 0.002, rr, y0, y1, T.seg);
+      stepRoot.add(lines(g, 0x7ec8e3, opacity === undefined ? 0.75 : opacity));
+    }
+  }
+
+  function addHSeams() {
+    var c;
+    for (c = 0; c < T.nc; c++) {
+      var y0 = courseY(c);
+      var rr = courseRadius(c) + 0.018;
+      stepRoot.add(lines(lineGeo(circlePts(0, y0 + 0.01, 0, rr, T.seg), true), 0xe8c27a, 0.95));
+      // second ring to suggest seam thickness
+      stepRoot.add(lines(lineGeo(circlePts(0, y0 + 0.035, 0, rr, T.seg), true), 0xe8c27a, 0.45));
+    }
+  }
+
+  function addVWelds() {
+    var c, vw;
+    for (c = 0; c < T.nc; c++) {
+      var y0 = courseY(c), y1 = courseY(c + 1);
+      var rr = courseRadius(c);
+      var nvw = Math.max(6, Math.round(2 * Math.PI * T.r / 3.8)); // scaled plate width
+      for (vw = 0; vw < nvw; vw++) {
+        var ang = (vw + (c % 2) * 0.5) / nvw * Math.PI * 2;
+        var x = Math.cos(ang) * (rr + 0.012);
+        var z = Math.sin(ang) * (rr + 0.012);
+        var mesh = lines(boxWire(0.035, (y1 - y0) - 0.05, 0.028), 0xf0a070, 0.9);
+        mesh.position.set(x, (y0 + y1) * 0.5, z);
+        mesh.rotation.y = -(ang + Math.PI * 0.5);
+        stepRoot.add(mesh);
+      }
+    }
+  }
+
+  function addNozzles() {
+    var nzb;
+    for (nzb = 0; nzb < 7; nzb++) {
+      var nza = T.stair + 2.1 + nzb * 0.62;
+      var nzy = (nzb % 3) * 0.55 + 0.42;
+      var nzr = 0.055 + (nzb % 3) * 0.025;
+      var nex = Math.cos(nza), nez = Math.sin(nza);
+      // pad ring on shell
+      var padR = nzr * 2.4;
+      var pad = lines(lineGeo(circlePts(
+        nex * (T.r + 0.01), nzy, nez * (T.r + 0.01), padR, 16
+      ), true), 0x9ad7a0, 0.85);
+      // orient circle in plane perpendicular to radial — approximate as Y-up ring shifted
+      pad.rotation.z = Math.PI * 0.5;
+      pad.rotation.y = -nza;
+      stepRoot.add(pad);
+      // stub line
+      stepRoot.add(lines(lineGeo([
+        [nex * T.r * 0.99, nzy, nez * T.r * 0.99],
+        [nex * (T.r + 0.18), nzy, nez * (T.r + 0.18)]
+      ]), 0x9ad7a0, 0.95));
+      // flange tip
+      var tip = new THREE.Mesh(
+        new THREE.SphereGeometry(nzr * 1.1, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0x9ad7a0 })
+      );
+      tip.position.set(nex * (T.r + 0.18), nzy, nez * (T.r + 0.18));
+      tip.scale.set(1, 0.45, 1);
+      stepRoot.add(tip);
+    }
+  }
+
+  function addGirder() {
+    var y = T.h - 0.45;
+    stepRoot.add(lines(lineGeo(circlePts(0, y, 0, T.r + 0.01, T.seg), true), 0xd4a5e8, 0.9));
+    stepRoot.add(lines(lineGeo(circlePts(0, y, 0, T.r + 0.38, T.seg), true), 0xd4a5e8, 0.9));
+    // radial spokes
+    var i;
+    for (i = 0; i < 18; i++) {
+      var a = i / 18 * Math.PI * 2;
+      stepRoot.add(lines(lineGeo([
+        [Math.cos(a) * (T.r + 0.01), y, Math.sin(a) * (T.r + 0.01)],
+        [Math.cos(a) * (T.r + 0.38), y, Math.sin(a) * (T.r + 0.38)]
+      ]), 0xd4a5e8, 0.55));
+      // strut down to shell
+      stepRoot.add(lines(lineGeo([
+        [Math.cos(a) * (T.r + 0.01), y - 0.28, Math.sin(a) * (T.r + 0.01)],
+        [Math.cos(a) * (T.r + 0.35), y, Math.sin(a) * (T.r + 0.35)]
+      ]), 0xd4a5e8, 0.7));
+    }
+    // rail above
+    stepRoot.add(lines(lineGeo(circlePts(0, y + 0.35, 0, T.r + 0.35, T.seg), true), 0xd4a5e8, 0.65));
+  }
+
+  function addRoof() {
+    var roofY = T.h;
+    // cone side wire
+    var seg = T.seg, i;
+    var arr = [];
+    var r0 = T.r * 0.10, r1 = T.r, y0 = roofY + 0.45, y1 = roofY + 0.05;
+    for (i = 0; i < seg; i++) {
+      var a0 = i / seg * Math.PI * 2, a1 = (i + 1) / seg * Math.PI * 2;
+      var c0 = Math.cos(a0), s0 = Math.sin(a0), c1 = Math.cos(a1), s1 = Math.sin(a1);
+      arr.push(c0 * r1, y1, s0 * r1, c0 * r0, y0, s0 * r0);
+      arr.push(c0 * r1, y1, s0 * r1, c1 * r1, y1, s1 * r1);
+      arr.push(c0 * r0, y0, s0 * r0, c1 * r0, y0, s1 * r0);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    stepRoot.add(lines(g, 0xe8b4a0, 0.9));
+    // furniture dots
+    var hatch = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.1, 0.1, 0.25, 8),
+      new THREE.MeshBasicMaterial({ color: 0xb0b8c0, wireframe: true })
+    );
+    hatch.position.set(T.r * 0.35, roofY + 0.35, -T.r * 0.20);
+    stepRoot.add(hatch);
+    var vent = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.1, 0.2, 8),
+      new THREE.MeshBasicMaterial({ color: 0xb0b8c0, wireframe: true })
+    );
+    vent.position.set(-T.r * 0.30, roofY + 0.38, T.r * 0.28);
+    stepRoot.add(vent);
+  }
+
+  function addStair() {
+    var steps = 46, sr = T.r + 0.22, st;
+    for (st = 0; st < steps; st++) {
+      var a0 = T.stair + (st / steps) * Math.PI * 2;
+      var a1 = T.stair + ((st + 1) / steps) * Math.PI * 2;
+      var sy0 = 0.08 + (T.h - 0.6) * (st / steps);
+      var sy1 = 0.08 + (T.h - 0.6) * ((st + 1) / steps);
+      var x0 = Math.cos(a0) * sr, z0 = Math.sin(a0) * sr;
+      var x1 = Math.cos(a1) * sr, z1 = Math.sin(a1) * sr;
+      stepRoot.add(lines(lineGeo([
+        [x0, sy0, z0], [x1, sy1, z1]
+      ]), 0xa8c4e0, 0.85));
+      // outer rail
+      stepRoot.add(lines(lineGeo([
+        [Math.cos(a0) * (sr + 0.18), sy0 + 0.35, Math.sin(a0) * (sr + 0.18)],
+        [Math.cos(a1) * (sr + 0.18), sy1 + 0.35, Math.sin(a1) * (sr + 0.18)]
+      ]), 0xa8c4e0, 0.55));
+      if (st % 3 === 0) {
+        stepRoot.add(lines(lineGeo([
+          [x0, sy0, z0],
+          [Math.cos(a0) * T.r, sy0, Math.sin(a0) * T.r]
+        ]), 0xa8c4e0, 0.4));
+      }
+    }
+  }
+
+  function addBund() {
+    var half = T.r + T.bundPad;
+    var corners = [
+      [-half, -half], [half, -half], [half, half], [-half, half], [-half, -half]
+    ];
+    var i;
+    for (i = 0; i < 4; i++) {
+      var a = corners[i], b = corners[i + 1];
+      // wall top edge
+      stepRoot.add(lines(lineGeo([
+        [a[0], T.bundH, a[1]], [b[0], T.bundH, b[1]]
+      ]), 0x6a7a6e, 0.9));
+      stepRoot.add(lines(lineGeo([
+        [a[0], 0, a[1]], [b[0], 0, b[1]]
+      ]), 0x6a7a6e, 0.45));
+      // posts
+      stepRoot.add(lines(lineGeo([
+        [a[0], 0, a[1]], [a[0], T.bundH, a[1]]
+      ]), 0x6a7a6e, 0.7));
+    }
+  }
+
+  function showStep(idx) {
+    clearStep();
+    var step = STEPS[idx];
+    switch (step.id) {
+      case 'spec':
+        addAxis();
+        break;
+      case 'courses':
+        addAxis();
+        addCourses(0.85);
+        break;
+      case 'hseams':
+        addCourses(0.28);
+        addHSeams();
+        break;
+      case 'vwelds':
+        addCourses(0.22);
+        addHSeams();
+        addVWelds();
+        break;
+      case 'nozzles':
+        addCourses(0.25);
+        addHSeams();
+        addVWelds();
+        addNozzles();
+        break;
+      case 'girder':
+        addCourses(0.22);
+        addHSeams();
+        addGirder();
+        break;
+      case 'roof':
+        addCourses(0.18);
+        addGirder();
+        addRoof();
+        break;
+      case 'stair':
+        addCourses(0.2);
+        addHSeams();
+        addGirder();
+        addRoof();
+        addStair();
+        break;
+      case 'assemble':
+        addBund();
+        addCourses(0.35);
+        addHSeams();
+        addVWelds();
+        addNozzles();
+        addGirder();
+        addRoof();
+        addStair();
+        break;
+    }
+
+    document.getElementById('hudTitle').textContent = step.title;
+    document.getElementById('hudDesc').textContent = step.hud;
+    var items = document.querySelectorAll('.step-list li');
+    items.forEach(function (li, i) {
+      li.classList.toggle('active', i === idx);
+    });
+    document.getElementById('btnPrev').disabled = idx <= 0;
+    document.getElementById('btnNext').disabled = idx >= STEPS.length - 1;
+  }
+
+  var list = document.getElementById('steps');
+  STEPS.forEach(function (s, i) {
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<div><span class="n">' + (i + 1) + '</span><span class="title">' +
+      s.title.replace(/^[①-⑨]\s*/, '') + '</span></div>' +
+      '<div class="blurb">' + s.blurb +
+      '<div class="formula">' + s.formula + '</div></div>';
+    li.addEventListener('click', function () {
+      cur = i; stopPlay(); showStep(cur);
+    });
+    list.appendChild(li);
+  });
+
+  var cur = 0, playTimer = null;
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    document.getElementById('btnPlay').textContent = '自动播放';
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', function () {
+    stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+  });
+  document.getElementById('btnNext').addEventListener('click', function () {
+    stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    if (playTimer) { stopPlay(); return; }
+    document.getElementById('btnPlay').textContent = '停止';
+    playTimer = setInterval(function () {
+      if (cur >= STEPS.length - 1) cur = 0; else cur++;
+      showStep(cur);
+    }, 2600);
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+    orbit.spherical.set(16, 1.05, 0.75);
+    orbit.target.set(0, T.h * 0.45, 0);
+    syncCam();
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+    } else if (e.key === 'ArrowLeft') {
+      stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+    }
+  });
+
+  function resize() {
+    var w = viewport.clientWidth, h = viewport.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  showStep(0);
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!orbit.dragging && !playTimer) {
+      orbit.spherical.theta += 0.001;
+      syncCam();
+    }
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+</body>
+</html>

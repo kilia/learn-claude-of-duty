@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>市场关卡 · 合并批次目录（~18–21 draws）</title>
+<style>
+  :root {
+    --bg: #0e1114;
+    --panel: #161b20;
+    --card: #1a2128;
+    --line: #2a323a;
+    --text: #d6dde4;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --code: #9ad7a0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 28px 22px 64px; }
+  h1 { font-size: 1.35rem; font-weight: 600; margin: 0 0 8px; }
+  .lead { color: var(--muted); font-size: 13px; margin: 0 0 22px; max-width: 70ch; }
+  .lead code {
+    font-size: 11.5px; color: var(--accent);
+    background: #0a0c0e; padding: 1px 5px; border-radius: 3px;
+  }
+  .note {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 22px;
+    font-size: 13px; color: var(--muted);
+  }
+  .note strong { color: var(--text); font-weight: 600; }
+  .toc {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 28px;
+  }
+  .toc a {
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 4px 9px; font-size: 12px;
+  }
+  .toc a:hover { color: #fff; border-color: var(--accent); }
+  .batch {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+    margin-bottom: 14px;
+  }
+  .batch-head {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .swatch {
+    width: 42px; height: 42px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
+    flex-shrink: 0;
+  }
+  .batch h2 {
+    margin: 0; font-size: 1.05rem; font-weight: 600;
+  }
+  .batch h2 .n { color: var(--accent); margin-right: 6px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; margin-left: auto; }
+  .tag {
+    font-size: 10.5px; letter-spacing: 0.02em;
+    padding: 2px 7px; border-radius: 3px;
+    background: #0e1114; border: 1px solid var(--line); color: var(--muted);
+  }
+  .tag.on { color: #c8e0c4; border-color: #3a5340; }
+  .tag.warn { color: #e0c8a4; border-color: #5a4830; }
+  .tag.metal { color: #c4d0e0; border-color: #3a4555; }
+  .tag.glass { color: #a8d0e0; border-color: #355060; }
+  .geo { margin: 0 0 10px; color: var(--text); font-size: 13.5px; }
+  .mat {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    background: #0e1114;
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+  }
+  @media (max-width: 700px) { .mat { grid-template-columns: 1fr; } }
+  .mat dt { color: var(--muted); float: left; clear: left; width: 7.2em; }
+  .mat dd { margin: 0 0 4px 7.2em; color: var(--text); }
+  .mat dd code { color: var(--code); font-size: 11.5px; }
+  .detail {
+    margin: 10px 0 0; color: var(--muted); font-size: 12.5px;
+  }
+  .detail em { color: #b8c4ce; font-style: normal; }
+  footer {
+    margin-top: 28px; padding-top: 14px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Al-Bakr 市场 · 静态合并批次目录</h1>
+  <p class="lead">
+    来源：<code>src/world/level.js</code> 的 <code>SURF</code> + <code>Builder</code> →
+    <code>_finalize</code> → <code>Geo.mergeAll</code>。
+    每个非空材质桶合并成 <strong>1 个 Mesh = 1 次 draw</strong>。
+    文档自称 ~18 draws；完整 <code>SURF</code> 表有 <strong>21</strong> 个键
+    （空桶不产出网格；湿斑等可能极稀）。
+    这是关卡静态本体，不含 props / 天气 / 武器 / UI。
+  </p>
+
+  <div class="note">
+    <strong>批次切分规则：</strong>按表面键（材质语义）分桶，不按“会不会动”。
+    同一键下所有几何共享一份 <code>MeshStandardMaterial</code> 克隆（开
+    <code>vertexColors</code>），世界 UV + 可选 domain warp，再写磨损顶点色。
+    <code>base</code> 字段把桶名重定向到库材质（如 <code>wet→concrete</code>、
+    <code>rooffelt→gravel</code>），再用 roughness / env 覆盖做出差异。
+    <code>distant</code> 是唯一 <code>own:true</code>——不用库图，用关卡自生成的远景立面贴图。
+  </div>
+
+  <nav class="toc" id="toc"></nav>
+  <div id="list"></div>
+
+  <footer>
+    材质参数摘自 <code>materials.js</code> DEFS；贴图算法摘自 <code>textures.js</code> 对应
+    <code>gen*</code>。Fallback 色来自 <code>level.js</code> FALLBACK（库缺失时的应急外观）。
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var BATCHES = [
+    {
+      id: 'asphalt', n: 1, title: 'asphalt · 路面沥青',
+      swatch: '#3e3f42',
+      tags: ['triplanar', 'ground', 'hero 1024', 'recv'],
+      geo: '整条市场街道路面（约 10 m 宽车行道）、补丁与路缘相关沥青面。不投射阴影（cast:false），避免路面对自身二次遮挡。',
+      lib: 'asphalt', tex: 'genAsphalt',
+      uv: '0.30 /m（世界 UV）+ warp 0.65',
+      pbr: {
+        color: '#3e3f42', alb: '0.125', hue: '0.45',
+        rough: '[0.24, 0.98] · flat 0.93', metal: '0',
+        ns: '1.15', env: '0.95', repeat: '0.5 tiles/m (tri)',
+        detail: 'mineral · cm5 · amount 0.9', polish: '0.62',
+        special: 'groundAmt 0.60 · dust=#c9b08a（沙尘灌边沟）· meso 1.0 · POM 0.014'
+      },
+      detail: '贴图：沥青基体 + Worley 石屑（多数埋入沥青）、轮迹磨光、焦油补丁、ridged 裂缝、油渍。粗度从抛光轮迹到尘膜大范围变化。设计意图：避免纯黑平面，保留暖沙漂移以承接建筑反弹光。'
+    },
+    {
+      id: 'concrete', n: 2, title: 'concrete · 浇筑混凝土',
+      swatch: '#9a958c',
+      tags: ['triplanar', 'ground', 'std 512', 'cast+recv'],
+      geo: '结构楼板、地面硬质铺装、碎块/废墟块、部分核心墙体、路缘相关混凝土件。调色板上最“中性灰”的家族。',
+      lib: 'concrete', tex: 'genConcrete',
+      uv: '0.42 /m + warp 0.80',
+      pbr: {
+        color: '#9a958c', alb: '0.20', hue: '0.90',
+        rough: '[0.46, 0.97] · flat 0.92', metal: '0',
+        ns: '1.15', env: '1.0', repeat: '1.0 tiles/m',
+        detail: 'mineral · 0.85', polish: '0.50',
+        special: 'chroma 0.78 · groundAmt 0.42 · POM 0.014 · triWarp 全轴 0.40'
+      },
+      detail: '贴图：捣实区 / 抹光区宏结构、露出骨料、气孔、裂缝、污垢汇入低处、风积沙在高点、潮湿斑块（局部极低粗糙）。chroma 的铁染故意压低，防止整街变成同一种米色。'
+    },
+    {
+      id: 'precast', n: 3, title: 'precast · 预制件（泽西护栏）',
+      swatch: '#8e887e',
+      tags: ['→ concrete', '高 UV', 'cast+recv'],
+      geo: '泽西护栏等预制混凝土单元。几何进 precast 桶，材质复用库的 concrete，但 UV 加倍以免小面上只采到一块低对比贴图。',
+      lib: 'concrete（SURF.base）', tex: 'genConcrete（同图，更高采样密度）',
+      uv: '0.82 /m（约为 concrete 的 2×）+ warp 0.55',
+      pbr: {
+        color: '同 concrete', alb: '同', hue: '同',
+        rough: '同 concrete', metal: '0',
+        ns: '同', env: '同', repeat: '由世界 UV 主导',
+        detail: '同 mineral', polish: '同',
+        special: '独立桶的唯一理由：texel 密度；否则 0.86 m 护栏面读成“白板”'
+      },
+      detail: 'Fallback 色略深于地板混凝土（#8e887e）。顶点磨损仍按混凝土规则画，护栏棱角会拿到更高 edge wear。'
+    },
+    {
+      id: 'concrete_wall', n: 4, title: 'concrete_wall · 模板混凝土墙',
+      swatch: '#a39c90',
+      tags: ['triplanar', 'hero 1024', 'stoch', 'cast+recv'],
+      geo: '建筑结构核心、门洞/店面洞口的混凝土框、深色内凹框、部分楼板立面。比浇筑楼板更“墙面”的读感。',
+      lib: 'concrete_wall', tex: 'genConcreteWall',
+      uv: '0.34 /m + warp 1.00（强）',
+      pbr: {
+        color: '#a39c90', alb: '0.24', hue: '0.60',
+        rough: '[0.36, 0.96] · flat 0.9', metal: '0',
+        ns: '1.3', env: '1.0', repeat: '0.49 tiles/m ≈501 texels/m',
+        detail: 'mineral · 0.95', polish: '0.38',
+        special: 'triSharp 9 · stoch+dir · stochQ[0,7] · meso 0.85 · ground · 无 POM'
+      },
+      detail: '贴图：板缝 / 模板印、密封粉化区、砂窝。强制 triplanar，避免消费者 UV 搞砸导致近远细节尺度不一致。门洞框常带 .dark 标签，顶点色压暗。'
+    },
+    {
+      id: 'plaster', n: 5, title: 'plaster · 石灰抹灰皮',
+      swatch: '#d9c3a0',
+      tags: ['triplanar', 'hero', '街景主角', 'cast+recv'],
+      geo: '几乎所有立面外皮（3.5 cm 抹灰）、女儿墙、壁柱、阳台、窗套外层、破损边界的“还连着的皮”。画面里曝光最高、面积最大的暖色表面。',
+      lib: 'plaster', tex: 'genPlaster',
+      uv: '0.36 /m + warp 1.00（最强破格子）',
+      pbr: {
+        color: '#d9c3a0', alb: '0.42', hue: '0.40',
+        rough: '[0.36, 0.94] · flat 0.86', metal: '0',
+        ns: '1.05', env: '1.0', repeat: '0.49 tiles/m',
+        detail: 'mineral · 0.85', polish: '0.42',
+        special: 'chroma 0.82 · meso 1.0 · flat 0.92 · stoch+dir · 曾是最严重 tiling 罪犯'
+      },
+      detail: '贴图：抹刀痕迹、2 cm 级 corduroy、斑驳开裂网络（只在局部 zone）、砂粒、流挂污渍 drip、剥落到底层灰泥。剥落后几何露出 brick/concrete_wall 核心，不是贴图假洞。'
+    },
+    {
+      id: 'brick', n: 6, title: 'brick · 砖砌体',
+      swatch: '#8e5b45',
+      tags: ['triplanar', 'hero', '课程水平', 'cast+recv'],
+      geo: '抹灰剥落后的砖核、烟囱/通风竖井、屋顶小砌体、散落砖块、部分楼层色带。与 plaster 成对出现。',
+      lib: 'brick', tex: 'genBrick',
+      uv: '0.55 /m + warp 0.85（仅水平轴 warp，Y=0 保水平砖缝）',
+      pbr: {
+        color: '#8e5b45', alb: '0.15', hue: '0.42（弱锚，保留砖间色差）',
+        rough: '[0.36, 0.95] · flat 0.88', metal: '0',
+        ns: '1.35', env: '1.0', repeat: '0.69 → ~12 cm 砖层',
+        detail: 'mineral · 0.85', polish: '0.34',
+        special: 'triWarp=[0.55,0,0.55] · stochQ[4,12] · flat 0.45 · meso 0.7'
+      },
+      detail: '贴图：多色砖抽签、砂浆缝、缺角、烟熏。Y 向 domain warp 关闭，否则砖层会“波浪”。stochastic 偏移量化到砖模数格子。'
+    },
+    {
+      id: 'sand', n: 7, title: 'sand · 风积沙 / 尘堆',
+      swatch: '#c9b08a',
+      tags: ['triplanar', 'diffuse 参考', 'recv'],
+      geo: '街角沙堆、屋顶积沙盘、废墟上的沙斑、blobDisc 散布。不投影。图表上的纯漫反射参考面。',
+      lib: 'sand', tex: 'genSand',
+      uv: '0.55 /m + warp 0.75',
+      pbr: {
+        color: '#c9b08a', alb: '0.30', hue: '0.45',
+        rough: '[0.82, 1.0] · flat 0.98', metal: '0',
+        ns: '0.95', env: '0.9', repeat: '1.0',
+        detail: 'mineral · 1.0', polish: '0.0（无光泽故事）',
+        special: 'POM 0.010 · groundAmt 0.22 · meso 1.0 · 风纹干涉'
+      },
+      detail: '贴图：沙丘宏起伏、漂移深度场、整数圈风纹 + 浅角第二列涟漪、颗粒 Worley、潮湿斑、粗细分选。没有 polish——沙永远是哑光。'
+    },
+    {
+      id: 'gravel', n: 8, title: 'gravel · 碎石 / 骨料',
+      swatch: '#8d857a',
+      tags: ['triplanar', '强法线', 'cast+recv'],
+      geo: '碎石小路、散落骨料斑、部分地面过渡。屋顶油毡也借这张图（见 rooffelt）。',
+      lib: 'gravel', tex: 'genGravel',
+      uv: '1.05 /m + warp 0.60',
+      pbr: {
+        color: '#8d857a', alb: '0.16', hue: '0.55',
+        rough: '[0.45, 1.0] · flat 0.96', metal: '0',
+        ns: '1.45', env: '0.9', repeat: '1.0',
+        detail: 'mineral · 1.0', polish: '0.24',
+        special: 'POM 0.040（库内最深之一）· meso 1.15'
+      },
+      detail: '贴图：大/中/小三级破碎石（非圆卵石）、尘填缝。高 bump + 深 POM，让 20 m 外屋顶/地面仍有颗粒可读性。'
+    },
+    {
+      id: 'rooffelt', n: 9, title: 'rooffelt · 屋面油毡',
+      swatch: '#4b4843',
+      tags: ['→ gravel', '高 UV', 'recv'],
+      geo: '平屋顶卷材、檐口压条、卷筒、小块修补。借 gravel 贴图，但 UV 提到建筑细节密度，避免屋顶读成“碎石小路”。',
+      lib: 'gravel（base）', tex: 'genGravel',
+      uv: '1.55 /m + warp 0.55 · cast:false',
+      pbr: {
+        color: 'gravel 图 × 顶点 tint（常压暗沥青色）', alb: '同 gravel',
+        hue: '同', rough: '同', metal: '0',
+        ns: '同', env: '同', repeat: '世界 UV 主导',
+        detail: '同', polish: '同',
+        special: '几何侧用 FELT 顶点 tint 把碎石调成焦油黑'
+      },
+      detail: 'Fallback #4b4843。meso 层负责大面积屋顶上的接缝/鼓包/补丁可读性。'
+    },
+    {
+      id: 'sandbag', n: 10, title: 'sandbag · 麻袋沙包',
+      swatch: '#a08f6c',
+      tags: ['woven', 'stoch dir', 'cast+recv'],
+      geo: '街垒/护墙叠放的沙包（sackGeo 变体缓存）。独立桶，禁止再走红条纹遮阳布。',
+      lib: 'sandbag', tex: 'genSandbag',
+      uv: '2.10 /m（极密）· warp 关闭 · rough 强制 ≈0.98',
+      pbr: {
+        color: '#a08f6c', alb: '0.30', hue: '0.40',
+        rough: '[0.70, 1.0] · flat 0.96', metal: '0',
+        ns: '1.25', env: '0.9', repeat: '1.1',
+        detail: 'woven · tile 28 · 0.8', polish: '0.14',
+        special: 'stoch+dir（沙向下渗）· ground · 关卡可做 SACK_TARGET 顶点色校正'
+      },
+      detail: '贴图：手纺黄麻粗纱、松织空隙、UV 晒白、污垢、破裂处沙粒向下 drip。绝对不能用 genFabric 条纹遮阳布，否则整道街垒变芥末色色块墙。'
+    },
+    {
+      id: 'tile', n: 11, title: 'tile · 釉面地砖',
+      swatch: '#b9b3a6',
+      tags: ['UV 映射', 'stoch 格子', 'shop 地面'],
+      geo: '店面地台踢脚/门槛砖条、室内地砖场（可带 uvRot/uvOff 分区铺法）。',
+      lib: 'tile', tex: 'genTile',
+      uv: '0.85 /m + warp 0.45 · 4×4 砖格',
+      pbr: {
+        color: '#b9b3a6', alb: '0.19', hue: '0.85（拉向中性，避免像沙）',
+        rough: '[0.12, 0.92] · flat 0.62', metal: '0',
+        ns: '0.55', env: '0.8', repeat: '1.15 → ~25 cm 砖',
+        detail: 'mineral · 0.5', polish: '0.78（釉面高光）',
+        special: 'stochQ[4,4] · groundAmt 0.38 · POM 0.008'
+      },
+      detail: '贴图：釉面斑驳、填缝砂、龟裂、崩边、交通抛光路径、拖把拖痕。缝必须成连续网格，故 stochastic 量化到 4×4。'
+    },
+    {
+      id: 'wet', n: 12, title: 'wet · 积水斑',
+      swatch: '#6d7076',
+      tags: ['→ concrete', '镜面覆盖', 'recv'],
+      geo: '巷内积水 blobDisc。几何借混凝土颗粒，材质克隆后强制低粗糙 + 高环境反射。',
+      lib: 'concrete（base）+ 覆盖', tex: 'genConcrete 图',
+      uv: '0.55 /m + warp 0.35',
+      pbr: {
+        color: '混凝土图', alb: '同 concrete',
+        hue: '同', rough: '覆盖 multiplier ≈ 0.085', metal: '0',
+        ns: '同', env: '覆盖 ≈ 1.7', repeat: '同',
+        detail: '同', polish: '同',
+        special: '真正镜像天空，而不是“深色干板”；顶点 G 通道仍控制湿感权限'
+      },
+      detail: 'Fallback #6d7076 / rough 0.09。天气系统的全局湿参数再乘顶点湿掩码。'
+    },
+    {
+      id: 'wood_plank', n: 13, title: 'wood_plank · 木板',
+      swatch: '#6b5540',
+      tags: ['UV', '门窗', 'cast+recv'],
+      geo: '木门扇、窗板/挡板、货架板、临时木构、部分店招托架。frameKey 也可能是 painted_metal。',
+      lib: 'wood_plank', tex: 'genWood',
+      uv: '0.85 /m + warp 0.35',
+      pbr: {
+        color: '#6b5540', alb: '0.13', hue: '0.30',
+        rough: '[0.44, 0.90] · flat 0.78', metal: '0',
+        ns: '1.0', env: '0.95', repeat: '1.15',
+        detail: 'mineral · 0.7', polish: '0.45',
+        special: 'POM 0.010 · meso 0.5 · 5 板拼缝'
+      },
+      detail: '贴图：年轮沿板长方向缓弯、纤维、榫缝/对接缝、风化与磨损。板缝必须跨 tile 无硬边。'
+    },
+    {
+      id: 'rusted_metal', n: 14, title: 'rusted_metal · 锈蚀金属',
+      swatch: '#7a4630',
+      tags: ['metal', 'weep', 'cast+recv'],
+      geo: '锈铁构件、栏杆残骸、空调外机底架、破损金属件、大量小五金。ART：金属要暗且染色，禁止亮灰。',
+      lib: 'rusted_metal', tex: 'genRustedMetal',
+      uv: '0.90 /m + warp 0.30',
+      pbr: {
+        color: '#7a4630', alb: 'null（金属 F0 走贴图）', hue: '0.35',
+        rough: '[0.42, 0.92] · flat 0.72', metal: '0.70',
+        ns: '1.2', env: '0.95', repeat: '1.09',
+        detail: 'metal · 0.7', polish: '0.35',
+        special: 'stoch+dir · 锈水向下 weep · 禁止 rot 把锈渍旋成横纹'
+      },
+      detail: '贴图：黑皮钢底 → 锈花 → 厚鳞三阶段、片状剥落、点蚀、剪切划痕仅在局部 zone。从暗介电底开始而不是从亮钢压暗。'
+    },
+    {
+      id: 'painted_metal', n: 15, title: 'painted_metal · 烤漆钢',
+      swatch: '#4a5058',
+      tags: ['metal', '介电漆', 'cast+recv'],
+      geo: '卷帘门、招牌底板、空调外壳、金属窗框（当 frameKey 选金属时）、管道/箱体漆面。',
+      lib: 'painted_metal', tex: 'genPaintedMetal',
+      uv: '0.90 /m + warp 0.25',
+      pbr: {
+        color: '#4a5058', alb: '0.25（漆是介电，需要漫反射锚）', hue: '0.35',
+        rough: '[0.20, 0.72] · flat 0.45', metal: '0.9（贴图通道在缺口处导电）',
+        ns: '0.7', env: '1.05', repeat: '1.09',
+        detail: 'metal · 0.5', polish: '0.62',
+        special: '必须有漫反射锚，否则褪色漆会比身后抹灰更亮'
+      },
+      detail: '贴图：晒褪瓷漆、崩口露底金属、脏膜。metalness 图只在缺口高；完整漆面是介电。'
+    },
+    {
+      id: 'corrugated_metal', n: 16, title: 'corrugated_metal · 瓦楞镀锌板',
+      swatch: '#6a6b66',
+      tags: ['metal', '肋距', 'cast+recv'],
+      geo: '遮阳棚/雨棚金属波纹板、临时屋顶补片。',
+      lib: 'corrugated_metal', tex: 'genCorrugated',
+      uv: '0.75 /m · warp 关闭（肋必须直）',
+      pbr: {
+        color: '#6a6b66', alb: 'null', hue: '0.55',
+        rough: '[0.26, 0.82] · flat 0.58', metal: '0.88',
+        ns: '1.0', env: '1.05', repeat: '1.9 → ~12 cm 肋距',
+        detail: 'metal · 0.6', polish: '0.60',
+        special: 'stochQ[6,0] 量化到肋 · 谷底锈、锌花'
+      },
+      detail: '贴图：正弦波纹 + 轻微变形、锌晶花、谷底积水锈、点蚀。振幅克制，避免读成“一排管子”。'
+    },
+    {
+      id: 'fabric', n: 17, title: 'fabric · 条纹遮阳布',
+      swatch: '#9a5a48',
+      tags: ['woven', 'sheen', 'cast+recv'],
+      geo: '市场遮阳篷 canopyGeo、横幅布条。颜色主要靠每段顶点 tint；库色只做弱色度锚，避免吃掉青绿条。',
+      lib: 'fabric', tex: 'genFabric',
+      uv: '1.05 /m · warp 关闭',
+      pbr: {
+        color: '#9a5a48', alb: '0.16', hue: '0.15（弱）',
+        rough: '[0.55, 1.0] · flat 0.95', metal: '0',
+        ns: '1.0', env: '0.85', repeat: '0.93',
+        detail: 'woven · tile 34 · 0.6', polish: '0.18',
+        special: 'sheen 0.32 · DoubleSide 视用法 · 静态 sag，不进 aFlex 风动'
+      },
+      detail: '贴图：宽褪色条纹（红/米色/青绿/赭，预混尘色）、不规则经纬、磨损孔。注意：市场篷是静态下垂，不是 snowbound 那套 mergeFlex 风动。'
+    },
+    {
+      id: 'rubber', n: 18, title: 'rubber · 橡胶',
+      swatch: '#26282b',
+      tags: ['极暗', '轮胎/软管', 'cast+recv'],
+      geo: '轮胎、橡胶软管/管线、缓冲件。albedo 极低（0.03），靠微起伏与臭氧裂纹可读。',
+      lib: 'rubber', tex: 'genRubber',
+      uv: '1.20 /m · warp 关闭',
+      pbr: {
+        color: '#26282b', alb: '0.030', hue: '0.60',
+        rough: '[0.45, 0.95] · flat 0.85', metal: '0',
+        ns: '0.9', env: '0.85', repeat: '1.6',
+        detail: 'mineral · tile 22 · 0.7', polish: '0.30',
+        special: 'outdoor 黑也不能死黑：臭氧褐变 + 防老剂灰膜'
+      },
+      detail: '贴图：模压纹、臭氧 ridged 裂纹、灰尘膜、模具合模线。摩擦抛光斑降低粗糙度。'
+    },
+    {
+      id: 'glass', n: 19, title: 'glass · 橱窗玻璃',
+      swatch: '#2a3a42',
+      tags: ['transparent', 'alpha 脏污', '无阴影'],
+      geo: '店窗、门上玻璃、内凹橱窗玻璃平面（位于 reveal 后）。透明预乘；不投射不接收阴影。',
+      lib: 'glass', tex: 'genGlass',
+      uv: '0.50 /m · warp 关闭',
+      pbr: {
+        color: '#cfd8dc', alb: 'null', hue: '0.40',
+        rough: '[0.05, 0.62] · flat 0.10', metal: '0',
+        ns: '0.45', env: '1.6', repeat: '2.5',
+        detail: 'mineral · 0.2', polish: '0.55',
+        special: 'opacity≈0.26 · side=Double · premul · ground weep 爬窗灰'
+      },
+      detail: '贴图：几乎无漫反射；亮度靠反射。灰尘/手渍/溅点抬高 alpha 与粗糙。裂纹散射发白。不透明灰板是明确失败模式。'
+    },
+    {
+      id: 'backdrop', n: 20, title: 'backdrop · 洞口深景卡',
+      swatch: '#4a453f',
+      tags: ['→ concrete_wall', '暗室内', 'recv'],
+      geo: '窗洞/门洞/店面开口后方的深景挡板，让开口有纵深而不是看穿建筑。不投影。',
+      lib: 'concrete_wall（base）', tex: 'genConcreteWall',
+      uv: '0.34 /m + warp 0.9',
+      pbr: {
+        color: '同 concrete_wall，顶点大幅压暗', alb: '同',
+        hue: '同', rough: '同', metal: '0',
+        ns: '同', env: '同', repeat: '同',
+        detail: '同', polish: '同',
+        special: '语义是“黑洞里的墙”，不是第二种混凝土'
+      },
+      detail: 'Fallback #4a453f。常与 glass / wood 板层叠：玻璃在前，backdrop 在后。'
+    },
+    {
+      id: 'distant', n: 21, title: 'distant · 远景城市环',
+      swatch: '#77715f',
+      tags: ['own 贴图', '不投影', '米级特征'],
+      geo: '可玩区外的远景楼块、塔、剪影建筑（34–124 m）。禁止投影——低角度太阳会把 80 m 影甩进玩法街。',
+      lib: '无（own:true）', tex: 'distantFacadeTexture（关卡内生成）',
+      uv: '盒投影 per-block（_distantUV），不用世界 UV 格子',
+      pbr: {
+        color: '#ffffff × 贴图（无图时 #77715f）', alb: '贴图均值',
+        hue: '—', rough: '≈0.95', metal: '0',
+        ns: '—', env: '默认', repeat: '整数窗格/面',
+        detail: '无库细节层', polish: '—',
+        special: '特征尺度是米（层线/窗洞/墩），厘米级库图在远处会塌成纯色'
+      },
+      detail: '独立材质 level_distantFacade。库材质全部按厘米作者，远距 minify 后标准差≈0，读成色卡——这是 own 贴图存在的唯一理由。'
+    }
+  ];
+
+  var toc = document.getElementById('toc');
+  var list = document.getElementById('list');
+
+  BATCHES.forEach(function (b) {
+    var a = document.createElement('a');
+    a.href = '#' + b.id;
+    a.textContent = b.n + ' ' + b.id;
+    toc.appendChild(a);
+
+    var el = document.createElement('article');
+    el.className = 'batch';
+    el.id = b.id;
+
+    var tags = b.tags.map(function (t) {
+      var cls = 'tag';
+      if (/metal|Metal/.test(t)) cls += ' metal';
+      if (/transparent|glass|Transparent/.test(t)) cls += ' glass';
+      if (/→|own|hero|主角/.test(t)) cls += ' on';
+      if (/极暗|无阴影|不投影/.test(t)) cls += ' warn';
+      return '<span class="' + cls + '">' + t + '</span>';
+    }).join('');
+
+    var p = b.pbr;
+    el.innerHTML =
+      '<div class="batch-head">' +
+        '<div class="swatch" style="background:' + b.swatch + '"></div>' +
+        '<h2><span class="n">' + String(b.n).padStart(2, '0') + '</span>' + b.title + '</h2>' +
+        '<div class="tags">' + tags + '</div>' +
+      '</div>' +
+      '<p class="geo">' + b.geo + '</p>' +
+      '<dl class="mat">' +
+        '<div><dt>库材质</dt><dd><code>' + b.lib + '</code></dd>' +
+            '<dt>贴图配方</dt><dd><code>' + b.tex + '</code></dd>' +
+            '<dt>UV / 阴影</dt><dd>' + b.uv + '</dd></div>' +
+        '<div><dt>锚色 / alb</dt><dd>' + p.color + ' · alb ' + p.alb + '</dd>' +
+            '<dt>rough / metal</dt><dd>' + p.rough + ' · M ' + p.metal + '</dd>' +
+            '<dt>ns / env / rep</dt><dd>ns ' + p.ns + ' · env ' + p.env + ' · ' + p.repeat + '</dd>' +
+            '<dt>细节 / 抛光</dt><dd>' + p.detail + ' · polish ' + p.polish + '</dd>' +
+            '<dt>特殊</dt><dd>' + p.special + '</dd></div>' +
+      '</dl>' +
+      '<p class="detail">' + b.detail + '</p>';
+
+    list.appendChild(el);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OPUS-PCG-v5 · 网页版讲义</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #121821;
+    --panel-2: #0e141c;
+    --line: #1f2a37;
+    --text: #e6edf3;
+    --muted: #8b98a9;
+    --accent: #38d0c6;
+    --accent-2: #4cc2ff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto;
+  }
+  header .brand { font-weight: 700; font-size: 16px; letter-spacing: .5px; }
+  header .brand em { color: var(--accent); font-style: normal; }
+  header .pager { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+  header .pager b { color: var(--text); }
+  header .spacer { flex: 1; }
+  button.ctl {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 14px; font-size: 14px; cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  button.ctl:hover { border-color: var(--accent); color: var(--accent); }
+  button.ctl:disabled { opacity: .35; cursor: default; }
+  button.ctl:disabled:hover { border-color: var(--line); color: var(--text); }
+  main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #stageWrap {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; overflow: auto;
+  }
+  #stage {
+    position: relative;
+    width: min(100%, calc((100vh - 180px) * 16 / 9));
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: var(--radius);
+    box-shadow: 0 18px 50px rgba(0,0,0,.55);
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  #stage img {
+    position: absolute;
+    object-fit: fill;
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+  #stage img.caro { opacity: 0; transition: opacity .7s ease; }
+  #stage img.caro.on { opacity: 1; }
+  #stage .caro-dots {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 9px; z-index: 4;
+  }
+  #stage .caro-dots i {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: rgba(255,255,255,.30); cursor: pointer;
+    transition: background .2s, transform .2s;
+  }
+  #stage .caro-dots i.on { background: var(--accent); transform: scale(1.15); }
+  #stage .caro-hint {
+    position: absolute; right: 14px; bottom: 10px; z-index: 4;
+    color: var(--muted); font-size: 11.5px; letter-spacing: 1px;
+    text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none;
+  }
+  #notes {
+    flex: 0 0 380px;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  #notes .notes-head {
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted); font-size: 13px; letter-spacing: 2px;
+  }
+  #notesBody {
+    flex: 1 1 auto; overflow-y: auto; padding: 18px 22px 30px;
+    font-size: 15px; line-height: 1.9;
+  }
+  #notesBody p { margin-bottom: 12px; color: #cfd8e3; }
+  #notesBody p:first-child { color: var(--text); }
+  #notesBody .empty { color: var(--muted); font-style: italic; }
+  #notesBody .speech-head {
+    color: var(--accent-2); font-size: 12px; letter-spacing: 1.5px;
+    margin-bottom: 12px; font-weight: 600;
+  }
+  #notesBody .speech-head .tm { color: var(--muted); margin-left: 8px; letter-spacing: .5px; font-weight: 400; }
+  #notesBody p.sp { color: #cfd8e3; font-size: 15px; }
+  #notesBody p.sp:first-of-type { color: var(--text); }
+  #toc {
+    position: fixed; left: 0; top: 0; bottom: 0; width: 300px;
+    background: var(--panel); border-right: 1px solid var(--line);
+    transform: translateX(-100%); transition: transform .22s ease;
+    z-index: 50; display: flex; flex-direction: column;
+  }
+  #toc.open { transform: translateX(0); }
+  #toc .toc-head {
+    padding: 16px 18px; border-bottom: 1px solid var(--line);
+    font-size: 14px; color: var(--muted); letter-spacing: 2px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #toc .toc-head button {
+    background: none; border: none; color: var(--muted);
+    font-size: 18px; cursor: pointer;
+  }
+  #tocList { flex: 1; overflow-y: auto; }
+  #tocList a {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 10px 16px; color: var(--muted);
+    text-decoration: none; font-size: 13.5px; border-left: 3px solid transparent;
+  }
+  #tocList a:hover { color: var(--text); background: var(--panel-2); }
+  #tocList a.cur { color: var(--accent); border-left-color: var(--accent); background: var(--panel-2); }
+  #tocList a .n { font-variant-numeric: tabular-nums; opacity: .7; min-width: 26px; }
+  #tocMask { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 40; display: none; }
+  #tocMask.show { display: block; }
+  footer {
+    flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 10px 16px; border-top: 1px solid var(--line); background: var(--panel);
+  }
+  footer .hint { color: var(--muted); font-size: 12.5px; margin-left: 10px; }
+  #stage .demo-btn {
+    position: absolute; top: 4%; right: 2.2%; z-index: 6;
+    padding: 12px 26px; font-size: 17px; font-weight: 700; letter-spacing: 2px;
+    color: #fff; border: none; border-radius: 999px; cursor: pointer;
+    background: linear-gradient(100deg,#ff3d81,#ff8a3d,#ffd93d,#3dff9e,#3dc8ff,#8a5cff,#ff3d81);
+    background-size: 300% 100%;
+    animation: demoFlow 5s linear infinite;
+    box-shadow: 0 0 22px rgba(255,90,160,.55), 0 4px 14px rgba(0,0,0,.5);
+    text-shadow: 0 1px 3px rgba(0,0,0,.4);
+    transition: transform .15s;
+  }
+  #stage .demo-btn:hover { transform: scale(1.07); }
+  #stage .demo-region {
+    padding: 0 8px; font-size: clamp(9px, 1.15vw, 16px); letter-spacing: .5px;
+    border-radius: 999px; opacity: 1;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.46), 0 0 16px rgba(255,90,160,.42);
+  }
+  #stage .demo-region:hover { transform: none; filter: brightness(1.12); }
+  @keyframes demoFlow { 0% { background-position: 0% 0; } 100% { background-position: 100% 0; } }
+  #stage .demo-layer {
+    position: absolute; inset: 0; z-index: 8; background: #000;
+    animation: demoFade .25s ease;
+  }
+  @keyframes demoFade { from { opacity: 0; } to { opacity: 1; } }
+  #stage .demo-layer iframe {
+    width: 100%; height: 100%; border: 0; display: block;
+    background: #000; opacity: 0; transition: opacity .3s;
+  }
+  #stage .demo-layer iframe.ready { opacity: 1; }
+  #stage .demo-loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 15px; letter-spacing: 2px;
+    pointer-events: none;
+  }
+  #stage .demo-close {
+    position: absolute; top: 12px; right: 14px; z-index: 9;
+    background: rgba(10,14,20,.82); color: #fff;
+    border: 1px solid rgba(255,255,255,.28); border-radius: 999px;
+    padding: 8px 16px; font-size: 14px; cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: background .15s, border-color .15s;
+  }
+  #stage .demo-close:hover { background: rgba(255,70,110,.85); border-color: transparent; }
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 14px; background: #000; z-index: 5;
+    transition: opacity .25s; pointer-events: none;
+  }
+  @media (max-width: 980px) {
+    main { flex-direction: column; }
+    #notes { flex: 0 0 42%; border-left: none; border-top: 1px solid var(--line); }
+    #stageWrap { padding: 12px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <button class="ctl" id="btnToc">☰ 目录</button>
+  <div class="brand">OPUS·PCG <em>v5</em> 网页版讲义</div>
+  <div class="pager"><b id="cur">1</b> / <span id="total">42</span></div>
+  <div class="spacer"></div>
+</header>
+<main>
+  <div id="stageWrap"><div id="stage"><div id="loading">图片加载中…</div></div></div>
+  <aside id="notes">
+    <div class="notes-head">演讲实录 SPEECH</div>
+    <div id="notesBody"></div>
+  </aside>
+</main>
+<footer>
+  <button class="ctl" id="prev">← 上一页</button>
+  <button class="ctl" id="next">下一页 →</button>
+  <span class="hint">键盘 ←/→ 或 空格 翻页 · Home/End 首末页</span>
+</footer>
+<div id="tocMask"></div>
+<nav id="toc">
+  <div class="toc-head"><span id="tocCount">目录</span><button id="tocClose">✕</button></div>
+  <div id="tocList"></div>
+</nav>
+<script>
+const SLIDES = [{"no": 1, "images": [{"src": "images/slide01-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:04:05–00:07:15", "paras": ["开场：今天想和大家分享的，不只是一次 AI 生成游戏的技术演示，更是我们关于未来 PCG 发展方向的思考。", "背景与行业现状：从 2017 年 GDC 之后，我开始在游戏公司内主持 PCG 相关工作，到现在快十年了。这些年我一直关注 PCG 技术的发展，持续探索用 PCG 提升内容生产效率，把美术的设计经验、场景搭建经验和各种专业知识沉淀为可复用的系统。在过去很长一段时间里，我们都认为 PCG 的门槛比较高：它的效果好、效率提升大，但背后依赖大量专业能力——对游戏设计的理解，对美术、关卡甚至剧情的长期积累，复杂的算子、一整套流程，以及可复用生产流程的搭建经验。这些能力经过多年积累，形成了相对牢固的行业壁垒；如今基本上每个工作室内部都有 PCG 职能，各工作室群也大多有自己的 PCG 技术。", "团队积累：我们中心引擎技术团队在过去七年里，有多个年份都在 PCG 相关技术上带领公司内的 Tech Future 项目，产生了很大的技术影响力，整体技术先进性一直跑在比较前面。去年我们做的古建筑 Demo，还去巴黎联合国教科文组织（UNESCO）世界遗产大会上做了技术分享，我们的技术能力是经得起检验的。", "转折点：但我今天看到的是，随着新一代大模型、AIGC 和 Agent 技术的快速发展，这些原本需要专业团队分工协作、大量依赖专业人士经验完成的工作，正在被大模型逐步理解、生成和自动化。这是一个非常大的转折点——我认为现在可能正是 PCG 技术向未来发展的一个重大转折，也借这个机会给大家讲讲我在这上面的思考。", "核心判断：未来 PCG 技术的核心竞争力，不是我们自己会不会写算法、能不能生产内容，而是能不能借助 Agent 持续理解 PCG 的目标，生成算子、生成内容，与人协作、自主迭代，最终完成整个内容生产的过程。", "希望通过这次分享，和大家一起拥抱 AIGC 与 Agent，让它们成为我们 PCG 工作方向未来发展的核心方向。"]}}, {"no": 2, "carousel": true, "images": [{"src": "images/slide02-1.gif", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}, {"src": "images/slide02-2.gif", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}, {"src": "images/slide02-3.gif", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:07:15–00:09:27", "paras": ["**Demo：Operation Blackout —— 零资产复刻《使命召唤》**", "来历：OPUS 5 发布后，外国网友最先做出了 Claude of Duty 的 Demo，复刻《使命召唤》（Call of Duty）系列；两周之后，我们团队的 TA Kelvin 也从零开始、仅用 OPUS 5 复刻出了自己的版本（引擎技术团队出品）。下面通过三段 GIF 直接看 Demo 的实际运行效果。", "工程形态：整个工程只有约 2MB 的 JS（十几万行代码），完全没有任何美术素材——场景中用到的所有贴图、所有 Mesh，全部是运行时实时生成的，所以我称之为零资产。", "演示内容：枪械战斗、换弹、移动等 FPS 要素一应俱全，天气、爆炸、火光等效果俱全；被爆炸波及时还会出现眩晕效果（视角震颤、画面模糊），对 FPS 关键手感细节的还原也相当到位。整体质量不说 3A，接近 2A 的水平。"]}}, {"no": 3, "images": [{"src": "images/slide03-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:09:27–00:10:49", "paras": ["通过这个 Demo，今天想给大家讲的是整条链路上的一整套思考，共包括六个部分。", "第一，OPUS 5 如何完成这件事情的整体综述——即从零资产到端到端的 PCG 内容生产链条；第二，与非常经典的、从 2017 年一直活到现在的 PCG 游戏《无人深空》的技术对比。", "第三，算法分析：它端到端做这样一个游戏，到底用了哪些算法；第四，Texture 和 Mesh 生成的具体过程。", "第五，把它的 Critic 多 Agent 协作、自动审查、自动迭代的流程剖开来讲。", "第六，是我自己非常好奇的部分——对随机数种子使用规范的探索：它在使用随机数种子生成整个场景时遵循哪些规范，如何做到易于迭代、可以非常快地继续往下做修改，以及让随机数的影响不会扩散的一些特殊工程处理。", "最后，还会介绍根据这个 Demo 制作的一个可交互导览，展示其中的具体算法。下面先进入第一部分：从零资产到端到端的 PCG 内容生产链条。"]}}, {"no": 4, "images": [{"src": "images/slide04-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:10:49–00:14:53", "paras": ["先回应大家对 Demo 质量的直观感受：整体质量比较唬人，不说 3A，接近 2A 的水平。但大家有没有发现：场景中没有一张贴图、没有一个现成 Mesh；游戏工程跑起来的 runtime 只有 JS，一共写了十几万行，里面用到的所有贴图、所有 Mesh 都是它运行时生成的。这个过程非常震撼——完全不需要资产，所以我称之为零资产。", "项目如何完成：无论 Claude of Duty 还是我们内部 Kelvin 做的 Demo，都是一个人独立测试的。他没有去设计具体的系统，没有手动准备美术资产，只是给 Agent 输入了一段 Prompt——这段 Prompt 非常简单，由四句话组成。", "四句话的内容：第一句，要求生成一个达到最新 COD 水平的 FPS，允许 Agent 自动拆解任务、并发任务，通过评审和循环不断修复逼近目标（这是他的原话）；Kelvin 还追加了要求：再增加更多的关卡，最终把关卡扩充到十个，并不断迭代改进这十个关卡。", "从这四句话出发，Agent 自己搭建了刚才说的 PCG 算子，生成了材质贴图、Mesh、角色和动画，生成了天气和关卡，最后自己搭建了渲染系统。渲染用的是 Three.js——Three.js 本体的渲染没有刚才看到的那么好，后续的光照处理、阴影处理和整个后处理管线，都是它从零搭建的。它生成了程序化的几乎所有内容，也构建了我称为 Build、Critic、Fix、Verify 的四环闭环（后续详细介绍），最终完成十个风格各异、可以实际运行的游戏场景。", "成本：整个过程一共只消耗了约 20 个小时——Kevin 用两个周末做出来的。共调用 156 次 Agent，消耗大概 4000 多万 Token。从 Kevin 给的详细技术报告看：随着系统的生产和规范逐步建立，第一个关卡因为要把各种基础系统（包括算子）逐步搭建出来，成本占了其中一半，大概 2000 多万 Token；第二个关卡因为还要考虑复用等问题，Token 消耗仍比较多；从第三个开始，第三关、第四关、第五关基本上每个只要约 100 万 Token 就可以搭建出来。", "小结：这个 Demo 展示的不是“一个人一个周末就可以搭出游戏”，而是希望大家理解：AI 对 PCG 和游戏生产过程的理解，可能已经超过我们普通人；我们需要向它学习，如何用 Agent 按照非常精确地遵从我们目标的方式，搭建一条完整的游戏生产 PCG 管线。"]}}, {"no": 5, "images": [{"src": "images/slide05-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:14:53–00:15:57", "paras": ["再强调一次：OPUS 的端到端 PCG 内容生产管线不是一个孤立的 Demo，里面有价值的东西很多。也有同学从中看到了端到端的引擎生产过程——确实整个引擎基本上也是自己做的，除了调用 Three.js，没有依赖任何外部包。", "我们今天的 Focus 主要还在美术内容上：它如何完全不依赖外部美术文件，通过自己写算法，做贴图和 Mesh 的生成器，把它们拼装起来、运行、渲染、质量审查，甚至还做了非常好的性能优化，把整个链路跑通。我们要看它到底是真的发明了很多新算子、新流程，还是两者都有——它是怎么把这些能力组织成一条完整链条的。"]}}, {"no": 6, "images": [{"src": "images/slide06-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:15:57–00:17:16", "paras": ["要理解这条链条的整体价值，首先要看它是怎么改变传统内容生产范式的。传统的内容生产——大家对 PCG 或传统美术制作都比较了解——通常从模型、贴图、材质或者购买外部资产开始；美术负责把资产放进场景，程序负责让它们跑起来，并优化整体表现和性能。", "在这个 Demo 中，目标是不一样的：它尽量不把预制贴图和预制 Mesh 作为场景成立的前提，而是从目标和艺术方向（Art Direction）开始，同时生成规则，用规则和算子来生成资产。", "所以这个 Agent 不是用 RAG 之类的技术去搜索合适的美术资产，也不是调用现有的工具——它是自己做工具，自己补齐材质、几何、布局和运行逻辑。它的整个输出，最终我们不仅得到了一个场景和可以玩的游戏，还包括生成这个场景的所有算法。我觉得这个过程是最值得探索和研究的。", "关于“从零开始”：我们一般说从零开始，是指里面核心的东西由我自己来做；而它的从零开始，是真的从零开始。"]}}, {"no": 7, "images": [{"src": "images/slide07-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:17:16–00:20:04", "paras": ["来理解它的整个输入：刚才已经解释了，就是一句话——要求做达到最新 COD 水平的 FPS，让 Agent 自动搭建、多 Agent 并发、评审循环迭代。因为我们输入的自然语言描述非常粗糙（什么叫 COD 水平？），会发现 Agent 做的第一件事，是写一份描述观察目标的 Art Direction 文档：自然语言描述，大概几千 Token 的样子，描述艺术方向是什么样子的；后续审查的时候会用到它——通过艺术方向来检查整体的质量和风格是否符合 Art Direction。还包括关卡目标：我要生成一个街道，还是生成海港、古代废墟；关卡目标也是用来最终审核整体生成效果的。", "有了目标之后，Agent 会拆分多个子 Agent 并行执行任务：包括刚才说的程序化生成 Texture 和程序化生成 Mesh——它会派生很多子 Agent 去调用这些工具，程序化生成场景中所需的各种内容。", "这所有的一切，在整体设计中就已经考虑使用固定的随机数种子：可以认为每个场景只需要一个随机数种子，就可以把场景完整地复刻出来。算法写定之后，关卡的分发成本，可能就是一个 Seed 加上几行 JS 就搞定了。", "它最终的输出是：一整个场景、可渲染的 runtime，以及刚才说的整个中间生产过程。", "角色转变：它描述了一个非常宏大的目标，Agent 的角色已经从局部写代码、做游戏的一部分，变成了自己去组织一棵完整的树——从零开始，把场景生成所需要的所有内容，包括最后组织成整个游戏的 runtime，把这件事情做出来。我们觉得这个转变还是非常神奇的。"]}}, {"no": 8, "images": [{"src": "images/slide08-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:20:04–00:21:23", "paras": ["它到底是用了怎样神奇的算法和流程，形成这样的闭环、闭环是否稳定？我们详细拆解了它最终生成的 runtime 代码，发现里面用到的——比如一些随机噪声、参数化几何的算法、PBR 的整个生成流程、后面的优化、合批和运行时渲染——本身都不是新出来的技术。", "OPUS 5 或者说这个 Agent 最厉害的一点，在于它把这些放进了一个连续的生产流程中：推动完整的从零开始的资产生成，并控制交付的结果——它会指定每个资产到底由哪个 Agent 是 Owner、谁来负责审查等等，可以一轮一轮地通过 Build、Fix、Verify 这样的过程进行迭代。", "这是一个系统组合的问题：在里面，怎么把系统组织搭建起来，Pipeline 就是非常重要的，也是 OPUS 的 Demo 相比我们之前用到的各种单点算法、演示的一些酷炫效果，更值得关注的地方。"]}}, {"no": 9, "images": [{"src": "images/slide09-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:21:23–00:21:47", "paras": ["接下来和《无人深空》做对比——它是从 2017 年一直活到现在、最有名的 PCG 游戏。"]}}, {"no": 10, "images": [{"src": "images/slide10-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:21:47–00:22:59", "paras": ["对比对象与共同点：我们现在的 Demo（Operation Blackout）和《无人深空》，内容类型肯定不一样，但它们分享了同一套 PCG 技术底座。", "根 Seed 分层生成树：两者都通过一个根随机种子（Seed）进入分层生成的一棵树，来生成整个世界——《无人深空》生成的是每一颗星球，这里对应的就是十个关卡中的每一个关卡。", "确定性重建与受控随机：两者都非常强调确定性的重建。虽然是随机数，但不是把物体完全随机地撒在场景中——随机数之上有很强的控制，对宏观环境、区域、物体与整个运行时之间的整体关联都做得非常好。", "工程完整度：两者都把 Mesh、材质、渲染这些事情搞定了，也都有性能优化。一个有趣的差别是：《无人深空》的性能优化感觉是人做的，而 Operation Blackout 的整个性能优化，也是 Agent 自己来做的。"]}}, {"no": 11, "images": [{"src": "images/slide11-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:22:59–00:24:09", "paras": ["项目性质与介入深度：从整体项目规模来说，OPUS 5 的 Demo 还是偏研究性质的，但它的 PCG 介入程度更深——刚才一直在强调，它是从零生成的：从零生成贴图、Mesh，包括整个场景的 Level Design 和整体的运行时逻辑。", "《无人深空》代表另一种成熟工业路径：通过程序化的规则和基础样本，把人预先做好的一些模块或模板进行组合；很多规则其实是由设计师和程序员预先编写，最终再由引擎来稳定执行。", "比较的正确姿势：这里我并不想简单地比较谁的算法更高级——最终会发现，算法都差不多。真正的差异在于：在 Agent 的时代，PCG 算法在资产生成链条中承担的比例，要远远大于《无人深空》那个时代；它可以把人非常高级的意图，导入到这套生成系统里来。"]}}, {"no": 12, "images": [{"src": "images/slide12-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:24:09–00:24:33", "paras": ["Seed 的工程要求差异：在 OPUS 5 的 Demo（Operation Blackout）中，随机数种子除了复现场景，还服务于 Critic 审查的 A/B 对比、回归测试和局部因果隔离——如果修改一个对象导致无关对象也发生变化，就很难判断 Critic 看到的差异到底来自哪次改动（这部分后面有专门一章展开）。", "《无人深空》则更强调世界身份、空间寻址、重新加载和长期持久化体验，需要服务大规模探索、流式加载和多版本演进。它更像一个完整的游戏，由人来驱动——虽然是一个非常纯的 PCG 游戏，其中很多内容的生产部分，仍然是在人的指导下进行 PCG 的。", "两者的定性差异：OPUS 5 的 Demo，是纯粹由 Agent 主导的内容生产。两者都需要确定性，但确定性在系统中的主要消费者不同。"]}}, {"no": 13, "images": [{"src": "images/slide13-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:24:33", "paras": ["前面一直在强调流程的重要性；从这一部分开始，我们对它里面用到的几何和 PCG 算法的原则进行分析。", "分析的范围覆盖全部环节：从 Texture 生成、Mesh 生成，到最后的摆放（Layout）、Runtime 支撑，甚至包括整体优化所用到的一系列算法。", "本页是算法栈的总览分层图：可以先建立一个整体印象——它由哪些层组成、各层分别负责什么，下一页给出分类结论。"]}}, {"no": 14, "images": [{"src": "images/slide14-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:24:33–00:25:05", "paras": ["结论先行：不管是生成 Texture、生成 Mesh、最后的摆放与 Runtime 支撑，甚至包括整体的优化等算法——从结论来说，其实都是成熟的算法，并不是说它发明了很多新的算法来做这件事情。", "算法栈的分类框架：可以概括为两类直接生成器和两类支撑层——Texture 负责材质和表面细节，Mesh 负责几何结构和物体身份；Layout 负责区域、路线、POI 和物体摆放，Runtime 负责合批、实例化、风动、雾和后处理。", "这样分类的好处：我们不会把所有技术名词混在一起，也能看清哪些算法直接生产资产，哪些算法负责把资产组织成可运行的场景。", "有了这个分类，接下来最容易产生误判的问题就浮现出来了：算法名这么多，是否意味着每个算法都是新的？——这引出下一页对算法原创性的讨论。"]}}, {"no": 15, "images": [{"src": "images/slide15-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:25:05–00:25:50", "paras": ["它用到的都是一些成熟的原语：比如 FBM 噪声、Worley Noise、Ridged，参数化的几何算法，包括一些 operation（算子）——比如扫掠、挤出，这些都是 3D 领域非常成熟的原子算法，都不是创新的算法。", "一个比较准确的判断是：OPUS 5 最新的创新点还是在这个流程上——它把这些成熟的原语接入到零资产、从零开始生产的流程中；它对随机数种子的控制和隔离（待会儿讲），做到了非常好的程度；它对如何评价场景生成的目标和质量，也形成了一个非常好的 Critic 闭环。", "算法本身是成熟的；算法的重新组织，让整个生产关系的壁垒得到了整体的突破。"]}}, {"no": 16, "images": [{"src": "images/slide16-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:25:50–00:26:14", "paras": ["下面看非常具体的一些例子：Texture。Texture 最主要的问题，是如何解决材质、颜色，以及整个 PBR 的所有贴图如何生成。", "我们看了它整体的算法和整体思想——对熟悉 Substance Designer 的人来说，都是比较成熟的想法。"]}}, {"no": 17, "images": [{"src": "images/slide17-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:26:14–00:27:53", "paras": ["Texture 生成采用 Height-first（高度优先）的思路：生成任何材质，都是先从贴图的高度入手。它通过一个随机数种子，加上对具体材质的理解，先用随机噪声和一些模板化的算法生成高度图；再把结构、起伏、风化（分化）和一些磨损等大家非常熟悉的成熟套路，写入高度场。", "再由高度场，加上每种材质唯一固定的基准颜色（固有颜色），派生其他通道：Normal、AO 本来就可以从高度场算出来；Roughness 是通过前面生成过程中的各种 Mask 来推测的；Albedo 颜色贴图是根据指定颜色派生的。", "整个生产流程中，形体感、光照的反应和 PBR 参数，其实都源于同一条结构，准确性非常好：贴图和 PBR 材质是完全对得上的，不会出现不同的层完全随机错开等情况，整体做得非常好。最终做到所有贴图都是可平铺的、运行时可以直接使用的程序化 PBR 贴图材质。", "这跟人的思路是比较接近的：从一个唯一的高度场，作为唯一的 Ground Truth 来生成所有内容，一致性做得非常好；整个细节的过程中，它会叠加这些噪声来进行侵蚀，包括加入一些人为生成的随机 Mask 来做各种处理；最后在运行时，把贴图贴到后续生成的 Mesh 上，把整个场景表达出来。"]}}, {"no": 18, "images": [{"src": "images/slide18-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:27:53–00:29:15", "paras": ["先回收上一页的要点：这套 Height-first 系统跟人的思路比较接近——从一个唯一的高度场作为唯一的 Ground Truth 来生成所有内容，一致性做得非常好；细节过程中叠加噪声进行侵蚀，并加入一些人为生成的随机 Mask 做各种处理；最后在运行时，把贴图贴到后续生成的 Mesh 上，把整个场景表达出来。", "配方系统的视角：可以把 OPUS 5 的 Texture 管线理解成一套可编程材质配方系统——Lattice、FBM、Worley、Ridged、Drip、Shear 提供不同尺度的形态；Recipe 把这些结构写入高度和辅助通道，再统一派生 PBR 结果；运行时则通过 Triplanar、Detail、POM 和 Wet 等方式完成表面呈现。", "关键不是噪声越多越好，而是每种算子在尺度、结构和材料语义上承担明确的职责。", "语言表达比较枯燥，下面切换到可视化 Demo，看贴图部分的具体生成样例：可以直观看到，它首先选择了很多噪声，而且这些噪声都是有参数的——它会自己先用参数生成好一整套随机噪声，数量蛮多的，然后再进入具体的材质制作流程。"]}}, {"no": 19, "images": [{"src": "images/slide19-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:29:15–00:34:58", "paras": ["Tile（瓷砖）：它开始考虑我们这边要的是一块一块拼贴的、能够四方连续的瓷砖。整体制作过程：先用最基本的算法把 4×4 的 tile 摆出来；通过一些 Transform、噪声的随机 Transform，把线条弄得不那么规整；然后做出一片一片瓷砖的本体；再叠加瓷砖的缺陷——它会自己去想“瓷砖会有些破损、应该缺掉一些部分”，叠加上它认为的各种破损：被拖把擦拭过的痕迹、不同高度的抛光带，还会仿真釉质瓷砖在烧制过程中的一些爆裂效果、釉质的磨损、它认为的各种裂纹、面的崩塌，以及砖块的整体缺失。", "举这个例子是因为它要做的其实是一条街道——一条战损的街道，它对含义的理解非常好，最终做的砖块确实是有缺失的。", "实施阶段：准备好这些素材（中间那些我认为是 Mask）之后，开始真正的实施：首先根据 tile 生成一张最基础的高度图；在高度的基础上，开始叠加刚才所说的这些噪声，包括 crack（裂纹）、砖缝，最后输出这样一张高度图。瓷砖整体比较平，没有特别大的起伏；缺损和凹陷通过深度就可以看出来，其实已经产生了一定的平面。然后再做 Albedo：瓷砖这边比较简单，因为土黄色是直接作为 RGB 颜色参数给定的；在参数的基础上，根据前面生成的 Mask，把色相做了轻微的改变。我觉得做得比较好——人肯定可以做得更好，但至少这个思路是比较容易懂的。", "在色相的基础上，因为刚才在几何和高度上做了很多叠加，它非常忠实地把这些随机算子也叠加到 Albedo 上——包括缺损的部分：它认为瓷砖损失了，这边就应该露出最背后的水泥颜色。这种想象能力让我非常惊讶。最后 Roughness 是根据刚才那些 Mask 估算出来的：瓷砖是比较光滑的，一旦有破损，粗糙度就会增加；水泥也是非常明确的——水泥肯定是很粗糙的。Normal 大家都知道（由高度图直接计算）。就这样，它把一整套贴图材质制作了出来，对整体的理解已经非常到位——这也是我觉得应该来给大家分享的一个非常大的出发点。", "类似地，我从里面导出了三个 Demo 材质（第一个场景一共生成了将近 20 个材质）。Concrete：它认为这是战损环境中的水泥墙，会在整体生成中考虑要不要加很多小石块到混凝土里，考虑得非常周到，包括整体水泥的不完美——一些气泡、一些空洞等等，最终也能把整套 PBR 贴图生成出来。百叶窗也非常典型：在高度图的雕刻上，它能自己理解百叶窗是一个斜出来、再下去的坡度；甚至想到里面有螺丝钉——虽然我觉得螺丝钉的摆放位置有问题，但整体意图的表达非常好；还有磨损、水流下来的痕迹等等，最终都可以把这些材质做出来。", "大家可以发现，它在整个制作过程中大的思路是一致的；而里面用到的算子和叠加方式，都是它根据不同的 Case 自己琢磨出来的——这是非常可怕的一件事情。最后的图（以瓷砖为例）可以看到：最终生成的这些贴图，是通过哪些中间贴图的迭代最终生成出来的；整个中间过程一共只用到了这些贴图——前半部分都是噪声，Mask 里有一些主观意图，最后就可以把整套 PBR 贴图生成出来。"]}, "demo_regions": [{"src": "interactive-demo/texture_pipeline/concrete/index.html", "x": 23.3, "y": 44.9, "w": 9.4, "h": 5.5, "label": "▶ 交互演示"}, {"src": "interactive-demo/texture_pipeline/reefer_panel/index.html", "x": 76.0, "y": 44.9, "w": 8.9, "h": 5.5, "label": "▶ Reefer Panel Demo"}, {"src": "interactive-demo/texture_pipeline/tile/index.html", "x": 85.3, "y": 44.9, "w": 9.3, "h": 5.5, "label": "▶ Tile Demo"}]}, {"no": 20, "images": [{"src": "images/slide20-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:34:58–00:37:15", "paras": ["这个我觉得是非常有颠覆性的，从我个人的感觉来说：因为我自己之前也尝试使用过 Substance Designer，我觉得我对它还是有一定的简单理解的。现在我们看到，PCG 能力已经基本上把 Substance Designer 的核心算法壁垒完全突破和覆盖掉了：从刚才看到的这些算子来看，包括 Substance Designer 内部的噪声、结构、Mask、高度，以及通道的各种计算的核心能力，都已经被它覆盖掉了。", "AI 时代如果现在要重新写一个 Substance，成本我觉得近乎于零，非常低。上面可能还有一些价值：给人用的 GUI 部分、产品节点、已有材质库的设计、艺术家在它上面的整体理解和整体工作流——这些还是有意义的；但就算法本身、对我们技术团队来说，算法壁垒已经下降到几乎没有。", "这其实会派生两个问题，我先说一下我做的分析：Substance Designer 里面有 200 多个原子算子，我逐个看了一下，也让 AI 帮我分析了一下——除了里面 SDF（符号距离场）相关的部分在这个 Demo 里没有被用到之外，它的所有算子基本上都被覆盖了；而 SDF 本身的算子和 op 也不多（写过的人都知道，都比较简单），也是容易被覆盖的。所以基本上全部被覆盖到了，给我的震撼还是比较大的：Designer 在算法层面已经没有壁垒了。", "后续我们要做贴图相关的算子，AI 都可以帮我们做；我们要投入更多的，可能是在怎么把它产品化、把人的意图更好地交付这些点上。我们也可以学习 AI 是怎么做贴图的这个过程——人去学习它，把中间生成的这些算子沉淀、迭代下来（当然是用 AI 工具去整理）；这些算子以后可能就是我们的 Agent 体系中的一些核心生成能力。我们之前更多的是 focus 在 PCG 的 Mesh 和摆放这块，贴图这块，我觉得后续要做门槛也不高，大家可以考虑一下，后续是不是可以在这上面搞一些事情。"]}}, {"no": 21, "images": [{"src": "images/slide21-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:37:15–00:38:31", "paras": ["以上是对 Texture 生成部分的介绍。下面我们讲 Mesh。", "Mesh 其实会比 Texture 复杂得多：从 AIGC 来看，也是贴图先被突破——原画师先失业。记得早几年我们就在玩很多贴图生成的付费网站；而 Mesh 到现在还没有完全被突破，这个 Demo 也不代表 Mesh 完全被突破了。", "但我们也需要了解：AI 在对 Mesh 和 3D 空间几何的理解上，也确实有了非常大的提升。"]}}, {"no": 22, "images": [{"src": "images/slide22-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:38:31–00:41:00", "paras": ["概述一下场景中所有的 Mesh——包括枪、建筑玻璃，还有布料——是怎么生成的。看了它整体的算法：输入都是最原子的 Primitive，比如球形、立方体、圆锥、圆柱、一些异形体等；通过这些参数，经过中间一系列的算子，把这些不同的几何形状进行叠加与组装；过程中还需要考虑如何使用我们刚才生成的这些贴图和材质，最终把一个物体生成出来。", "它输出的每一个物体，其实都有非常明确的身份：它做场景的时候是有明确要求的——这边要生成树干，那边要生成一块布料；海港要有一个储油罐；古代遗迹里需要石雕——就是这么复杂的事情，它都能做。", "这里的重点并不是说它怎么不断增加三角形的数量，而是说整个的生成流程——从身份、到理解物体怎么生成、到怎么把它和材质连接起来——这些都是它自己独立完成的，我是非常震撼的。", "下面看四个例子：树干是如何用非常简单的几个几何算子表达出来的；布料的垂感是如何做出来的；一个复杂的储油罐是怎么做出来的（它甚至上面还帮你做了楼梯）；最后是一个异形的浮雕。前几天涛哥在群里说“可能 ZBrush 也要被替代了”——我觉得还有差距，但确实是思想，它肯定是学到了。这几个例子我也会回到刚才的交互展示给大家看一下。"]}}, {"no": 23, "images": [{"src": "images/slide23-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:41:00–00:48:27", "paras": ["树干：一开始就是生成了一段随机的线段（可视化是让 AI 做的，可能不对——应该是曲线，它做成了线段，这是一个采样的过程）；在这个线段上找到一些关键的采样点；它会理解到树干是下面粗、上面细这样一个过程——虽然我觉得树干上面有点太细了，但整体的理解方向没有问题，它知道有粗细的问题。有了粗细，它会定好整体生成的方向、基准面，然后去撒点——把树干这一圈的基准点都找到；再把这些基准点通过三角化的方法连接起来，树干的形态基本上就出来了（虽然我觉得略丑、细节不足，但可以看到它的一些思想）。最后它还会考虑树根：树根用了非常简单的、统一的三维曲面表达出来——这是它一次性做成的，这个曲面我没有特别看懂，但看形状大概能知道是什么样子；最后把两者拼接起来，形成树干。", "布料：它和我们在 Houdini 里的布料仿真其实差不多——先给它一个基准的、均匀网格的布料；然后定义布料有一部分是被固定住的：这条横线被钉在一个物体上（它用的是柱子，物体是什么不用管）；给它一个静态下垂的仿真——我大概看了一下，用的是物质点法（MPM）的一个非常简单的版本，把这个仿真做了出来。做完之后它会去刷新一些权重，因为最后要让布料能够流动起来——做一个随着风速场运动的算法，所以要刷一些权重；然后完成三角化；根据刚才刷进去的权重，在风力的情况下就可以飘动起来了，还可以调风力的大小：风力越大幅度越大，风力小就轻轻地动。Market 场景中上面挂的很多衣服，都是用这样的布料进行制作的，想法还是 OK 的。", "储油罐：我真的没想到它这么简单的几步就做出来了。储油罐一开始是圆柱，这个大家肯定没有意见；然后加了很多细节——圆柱在几何结构上必须要有一些加强筋，不然整体结构是不稳定的，加强筋它都能考虑到；还会考虑这个罐体可能不是一整段做出来的，加了一些焊接点；接着布置一个旋转向上的楼梯：先安排一些小的凸起物，再做整个顶部人走在上面的围挡（它说的是挡风圈），把顶壳安装上去；旋转的楼梯基本上用算子就生成了——人其实可以从这边一圈一圈地走上去，直到走到顶；最后完成整体的拼装。这么几步，还是比较惊讶的——人去做这样一个储油罐，可能的步骤都要更复杂一点。", "我的感受：这说明现在以 OPUS 为代表的这批最新的多模态大模型，空间想象能力已经非常强了：它能够想象出东西是什么样，甚至能想象出它是怎么被制作出来的；这些能力很多时候人去做，可能都要好好想一想，这是非常可怕的。", "最后一个几何 Demo 只能膜拜——一个佛像的头。它的理解是：先把佛像头的边界确定出来，通过几个三角函数把边界做出来——这就不是人标准的做事方法了；在轮廓内撒点；撒点之后进行网格细化（这时的 UV 是平的）；还做了轮廓的挤出——我看了一下，是一个比较软的软边处理，实际上是做了一个挤出的操作。更夸张的操作是雕眼睛的眼眶：它是通过算子去叠加“调”出来的；鼻子也是叠加调出来的，包括嘴的微笑都是叠加雕出来的——我感觉这已经超出人的理解范畴，是 AI 才能理解的范式。然后再叠加一些随机的破损来模拟风化，最后采样成网格（这一步我没看懂它在做什么处理），还会根据不同的部分标记上不同的材质，最终就形成了这样的一个佛像。", "这给我们的思考（我一直在考虑这样的问题）：后续 LD（Level Design）的制作思路是不是要变一下？LD 一方面是节省性能，另一方面我们也要考虑它是会增加磁盘空间的。如果后续可以用这么简单的参数化几何去逼近一个如此复杂的形体，那是不是 LD 的整体制作要变天了？相关同学也可以好好思考一下。", "四个 Demo 小结：树、布料、储油罐，是比较传统的、我们能理解的过程；但像浮雕这样的制作过程，说实话已经非常数学了，至少超出我个人的想象力，是一种叠加方式。这也说明它在空间理解的能力上，虽然很多地方还不如人，但在有些非常细致的地方，我觉得已经超过人类了。"]}, "demo_regions": [{"src": "interactive-demo/mesh_pipeline/tree_trunk/index.html", "x": 3.61, "y": 69.97, "w": 18.12, "h": 5.47, "label": "打开树干交互演示"}, {"src": "interactive-demo/mesh_pipeline/cloth/index.html", "x": 27.98, "y": 69.97, "w": 17.14, "h": 5.47, "label": "打开布料交互demo"}, {"src": "interactive-demo/mesh_pipeline/oil_tank/index.html", "x": 52.05, "y": 69.97, "w": 17.77, "h": 5.47, "label": "打开储油罐交互demo"}, {"src": "interactive-demo/mesh_pipeline/bayon_face/index.html", "x": 76.22, "y": 69.97, "w": 19.38, "h": 5.47, "label": "打开石雕交互demo"}]}, {"no": 24, "images": [{"src": "images/slide24-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:48:27–00:50:24", "paras": ["简单概括一下它的生成过程：它会用参数化的表达（比如一些三角函数等），把很多复杂物体的几何剪影想象出来；进一步，在几何剪影之下，想象用什么样的算法——包括 Primitive（刚才说的立方体、圆柱等）——把台阶、各种结构、连接关系都雕刻出来；最终还可以把前面生成的贴图和所创造几何部分的材质关联上；还会考虑污损、污渍、磨损、粗糙度的这些变化——这是非常恐怖的。最后它还做了合批的处理，把 Mesh 和材质做了非常大的优化——如果这么多物件全部生成出来，其实是跑不动的。", "虽然它很厉害，但实事求是地说，它这里面表现出来的整体算子的能力和复杂度，和 Houdini 相比还是要小很多。不过这里其实不是想跟 Houdini 做复杂度的对比——在 AI 的时代，我觉得复杂度对比的意义不一定大。", "它用到的算法非常务实，基本上是按需使用的：树干、布料、储油罐、浮雕，包括它在场景中用到的这些。我们只能说它生成这些场景需要用到这些算法；我生成更加复杂的场景，没准会用到更多的算法。很多时候我反而觉得这些算法可能是比较核心的（当然要更专业的同学去分析）。"]}}, {"no": 25, "images": [{"src": "images/slide25-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:50:24–00:52:00", "paras": ["回到这一页的主题。我想强调的重点，并不是说我们现在的多模态模型所生成的 PCG 算子和 Houdini 差距很大、少了很多算子；我想说的是一条非常清晰的扩展路线：我们当前可能是这样的阶段，算子和 UE5 的 PCG 算子相比，可能也还不足、没有那么多，但我觉得这条上升的路线是非常清晰的。", "我们团队内部的 TA 同学雨果，也已经在做从零开始的端到端城市生成 Demo，试图积累一些相关的算子；我觉得可以把这两者结合到一起去看。", "我的判断：从中期看，我们就能够完全替代 UE5 PCG 的能力，我觉得问题不大——那 UE5 PCG 进一步发展的意义何在？我觉得是要打一个问号的。从长期来看，我觉得会逐步接近 Houdini 的能力范畴：不一定像 Substance Designer 那样被完全覆盖，可能是把 Houdini 里面对我们 PCG 生成真正有用的那些算子，基本上都实现掉；它可能还会有一些影视级的东西，我们不一定用得上，就不一定需要去做。", "整体的发展脉络我觉得还是比较清晰的，也希望做 PCG 相关的同学能够非常认真地思考一下。"]}}, {"no": 26, "images": [{"src": "images/slide26-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}, {"src": "images/slide26-2.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}, {"src": "images/slide26-3.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}, {"src": "images/slide26-4.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:52:00–00:53:37", "paras": ["雨果同学是上周四五给我看的他端到端生成的样例（现场确认在线）。我希望我讲完之后，你花一周时间准备一下——这周末或者下周——把你自己的 Demo 拆细了跟大家说一说：你的目标是怎么设定的？AI 在这中间做了哪些事情？它做了哪些算子？有哪些它做不到的？把这个 Demo 拆出来给大家讲讲，让大家感受一下。", "真正让我吃惊（估计大家也会吃惊）的是：在 PCG 生成这个事情上，端到端的能力已经非常强了，而这个 Demo 并不是 OPUS 5 做的，是 K3 做的——说明现在前沿开源模型的能力（虽然 K3 我们不一定部署得起来）、空间理解能力，也已经非常强了。"]}, "carousel": true, "carousel_interval_ms": 1000}, {"no": 27, "images": [{"src": "images/slide27-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:53:37–00:54:30", "paras": ["刚才说的这些内容里，对于专业的 PCG 同学，我觉得可以学习的是 Mesh 和几何生成算法的这些细节，以及它们是如何组织的——这是我们需要向 AI 去学的部分。", "而整体的生成、审查、修复和持续验收提升的闭环，我觉得是值得所有人——所有做 Agent 的同学，以及大家日常想要做成这件事情的同学——学习的，我自己也从中学到了很多新的方法。"]}}, {"no": 28, "images": [{"src": "images/slide28-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:54:30–00:58:41", "paras": ["前面介绍背景的时候，已经把过程说得非常清楚了：输入是非常短的。整个项目的制作方式其实并不符合我们通常提倡的规范——我一直跟大家说，大家不要许愿式编程：不要去跟大语言模型许愿，应该把“希望怎么来做这件事情”描述得更加清晰；描述越清晰，模型就能做得越好。现在大家也会用一些编程工具里的 Skills，比如 Superpowers，还有一个叫 Criticize Me 之类的，基本上都会有一个 Plan 的阶段，帮你把整个事情想清楚、说清楚。它敢这样做，对于复杂项目来说效果也还是不错的；但不得不承认，在 PCG 生成的领域，端到端的能力也是越来越强了——像这个 Demo 完全是许愿式生成：它许了一个愿望，真的生成出来了。", "看它是怎么来生成的：整个循环其实分成了四步。Build 负责生成，是多 Agent 派发去做的：它首先会把这些算子都做好；做好之后，不同的物件或者不同种类的物件其实分了批，派多个子 Agent 并行去做，这个我们称为 Build。Build 完了之后，会有一个独立的上下文、和这些 Build 完全无关的 Critic（审查者）负责审查。审查者唯一的输入没有图、没有参考图，就是刚才提到的 Art Direction 和整个项目的关卡目标——只有这两个文字描述。我的理解是，Art Direction 基本上是可以扔给 Nano Banana 或 GPT Image 去生成场景的样子的；它其实也可以用来定义“这个场景应该长什么样”。Critic 用这样的一个描述，就可以对场景进行审查了。", "审查结果出来之后，这里面有一整套 Owner 的机制：Critic 是进整个游戏里去看的，它审查到的物体由哪个 Builder 是 Owner，它都能找正确，把相关的修改意见非常准确地发给这个 Builder；这时候 Builder 就变成了第三步的 Fix——Build 和 Fix 是同一个角色，它会负责修好自己刚才做的东西；最后由 Critic 去 Verify 这个事情有没有做完：做完了就过，没做完继续迭代。多个 Agent 就是按照这样的生产迭代方式、根据每个文件的 Owner 并行工作的。", "补充一点：Critic 不仅是在场景中去跑、去截图，它还会去读源代码；它输出的这个 Finding 是很有价值的。我们平时经常会遇到（包括我自己、我老婆做一些 AI 生成的 Demo，比如给小孩子做相册、写小程序）说不清楚想让他改什么的情况：比如想把页码去掉，结果他留了空白；再说把空白去掉，又说不清楚。大家可以回头去看一下它的 Critic 是如何输出 Finding 的——非常准确和细致，可能也是 AI 更懂 AI；这个 Finding 确实能够指导 Builder 把问题修掉。", "总体来说，这样的一套流程，让质量变成了可复现、可定位、可验证、可修复、可提高的工作流程，是非常强的；它也确实可以逐步迭代提升每个场景的分数——不然也不可能在 20 个小时里做出大家刚才看到的这样一个有 10 个场景的 Demo。", "经验之谈（一定要隔离上下文）：日常工作中要让 AI 去审查自己的工作，一定要隔离上下文。在同一个上下文里说“你做完了，帮我检查一下”是没有意义的——很多时候 Agent 会直接从上下文里偷答案：它知道前面是自己做的，看一下自己做的过程，然后告诉你“我检查了什么什么”，其实根本不一定真的去检查。我甚至看到有博客建议：尽量不要用同一个 LLM，最好审查者是完全不同的另外一个 LLM——因为相同的 LLM 在相似的提示词下面，可能会犯同样的错误。除了这些相关经验，更让我震惊的是：这样的一个流程，居然真的能够提升整个项目的质量。"]}}, {"no": 29, "images": [{"src": "images/slide29-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "00:58:41–01:01:07", "paras": ["刚才也讲了一下：一方面，它在定义 Art Direction 的时候，就把审美问题定义得很好；另一方面，它会非常细致地根据每个出错物体的 Owner，把具体的问题定位、修掉。", "这里面还有一个值得大家日常工作学习的点，我觉得是打分的机制：它在定义 Art Direction 之后，其实是有一整套怎么给场景打分的规范的，我觉得也是非常有价值的。", "我自己的经历：日常工作中我经常参加一些评审，需要对大量内容做评分。我之前试过，让大模型做一些文字的提取，做得都挺好的；但你让他去打分，他打得都奇奇怪怪的——同一个案子，每次打出来的都不一样，他自己都对不齐。所以我一直认为“让 LLM 打分是不行的”。看了 OPUS 5 的 Operation Blackout Demo 之后，我发现其实是我之前用的不对。", "它在定义 Art Direction 之后，做了一个非常详细的审查表：对检查项有非常具体的描述，还有一个权重；每个细项的打分是非常粗粒度的——0 或 1（成功或没成功），最多 1、2、3（完成到哪一档），不要让他打非常细致的分数——这样的判断就会稳定很多；最后通过权重把整个总分合计出来。这样的打分规则，就一下子变得稳定了很多。", "我现在的日常实践：参加公司的评审，一下子要阅读十几份、二十几份材料，我都会让 AI 先去打分，我再去看 AI 说的这些问题是不是真的，做一些调整；评分表是我事先跟 AI 讨论、由我来制定出来的，最后按这个表去打——会发现打分准了很多。"]}}, {"no": 30, "images": [{"src": "images/slide30-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:01:07–01:02:59", "paras": ["这边举两个例子，来说明它的 Critic 和 Fix 的流程。先说右边的例子：它一开始生成的有点像 Minecraft 的风格，是用方块堆出来的；Critic 直接跟他说“你细节完全不够，我们要做 3A 的、COD 的游戏”；这个 Build 就真的 get 到了点，去 Polish、加了很多细节（包括刚才看到的生成过程）——可见它真的是能够评审和提升整体质量的。", "再说一个反面的案例：做海港场景的时候，里面有一些背景的效果，包括了闪电（Lightning）和 Splash——整个屏幕闪一下这个过程。一开始 Critic 评审，觉得“闪一下”的感觉太亮了还是太暗了（我忘了），所以要求去做一些修复；修复的过程中，它其实是在 Splash 的整体渲染链条上多加了几个 Splash。这就会造成后面我会讨论的一个问题——随机数序列的污染：随机数的整个序列，在给定一个 Seed（种子）之后是稳定的，但你不能在里面多取掉两个；多取掉两个之后，后续的生成流程所拿到的数字，就整个偏移掉了、完全不对了。", "这个例子就是一个非常好的反例：一开始整体流程在随机数的使用上没有那么规范，会导致修了 Splash 之后，把后面的 Lightning 整个都影响掉了。比较神奇的是，Critic 发现了这个问题——它居然能理解这是由于随机数造成的问题，就去把这个东西通过 Fork 的方式隔离了，我觉得这个也是非常强的一个点。"]}}, {"no": 31, "images": [{"src": "images/slide31-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:02:59–01:04:00", "paras": ["这两个例子说明了它的 Critic 和最后 Fix 的流程，同时也引出了我自己非常好奇的问题：它是怎么只用一个随机数种子，还能做好整个场景中各个物体的隔离、能保证可以修改东西的？我觉得还蛮神奇的。", "所以我去研究了一下这个方面：它是怎么通过单个随机数种子，既能确定性地生成场景，又能做分支派生——修改其中的某个局部，最终整个场景还能重建出来的。我觉得这是一个比较神奇的过程。"]}}, {"no": 32, "images": [{"src": "images/slide32-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:04:00–01:05:19", "paras": ["我本来的理解是：它是通过单个 Seed 的一个流——先生成 10 棵树，再生成某个建筑等等。后来发现不是：它是一个更加像树状的结构。它会把其中一些模块化的内容独立出来：首先生成的，比如说是场景摆放的 Seed；然后再生成 Material 的 Seed（也可以想象 Mesh 的 Seed、天气的 Seed），各种各样的 Seed；这些 Seed 再派生每个对象——派生每个对象的时候，还会去生成这个对象自己的 Seed。", "它还有一个原则，就是隔离——现在做的事情就是隔离；另外一个原则：如果要增加东西或者修改东西，都是在后面 Append 的——这样的话就不会有 Side Effects。", "它的整个随机数是一个树状的结构，有一点像堆栈。处理得不好的时候——就像一开始的闪电和 Splash，因为这是同一个效果嘛，被放在一起之后，你修一个就会影响另一个；所以必须去做隔离，这就是它说的 Fork 的概念。"]}}, {"no": 33, "images": [{"src": "images/slide33-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:05:19–01:05:45", "paras": ["做了这样的隔离之后，整个场景中每个局部的物体，就都变得可以分头重建了。如果要在里面增加东西，可以再 Fork——可以用随机数再去生成两个随机数——把想要额外生成的或者修改的东西，最终逐步地做掉。", "这个想法我觉得做得很好：做到这一点，它就可以局部地去改变关卡内部的一些细节、中间一些物体的有无、天气的各种参数等等，都可以做局部的修改。"]}}, {"no": 34, "images": [{"src": "images/slide34-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:05:45–01:06:10", "paras": ["最终这一套其实是非常好地服务于整个流程的工程目标的：它可以做 A/B 测试，能够保证整体的回归稳定性，能够做局部修改。", "没有隔离，这些事情都是做不到的：如果是一个单独的嵌套（流），你移除一个物体或者增加一个物体，后面全都连锁变化了。做了这样一个树状的结构之后，我觉得是非常简单、非常有效的一种方式。"]}}, {"no": 35, "images": [{"src": "images/slide35-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:06:10–01:06:27", "paras": ["这套确定性机制最终服务于非常实际的工程目标：A/B 测试、整体回归的稳定性、局部修改。没有隔离，这些事情都做不到——如果是单独一条嵌套的随机流，移除一个物体或者增加一个物体，后面全都连锁变化了。", "有了 fork、私有 Seed 和空间哈希这样的树状结构之后，问题变得非常简单、非常有效：局部改动可以尽量只影响目标系统；同一场景能够重拍、回归并解释差异，也因此更适合进入 Critic 闭环。", "更进一步，它能够真正做到“归因”——这也是涛哥经常说的一个词。这里的归因是指：每个部分都可以知道自己是由哪个随机数产生的、内部出了什么问题；而其他部分的修改，不会影响到我。", "一句话总结：确定性不是让每次都一样，而是让每次变化都能说明原因。"]}}, {"no": 36, "images": [{"src": "images/slide36-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:06:27–01:07:10", "paras": ["今天其实我想讲的所有内容就是这些。最后：这个 Demo 是一个非常简单的 index 网页，相关内容我回头都会发到群里，大家可以自己去看。"]}}, {"no": 37, "images": [{"src": "images/slide37-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:06:27–01:07:10", "paras": ["今天想讲的所有内容就是这些。最后介绍一下 Demo 的总入口：这是一个非常简单的 index 网页（survey/index.html），相关内容回头都会发到群里，大家可以自己打开去看。", "内容覆盖：Demo 里包括了刚才讲到的所有内容——Texture Pipeline 展示噪声、高度和 PBR 派生；Mesh Pipeline 展示几何案例与合批；Critic 目录展示缺陷、审查和修复病例。", "遗留部分：其中还有两块没来得及讲——一块是它怎么做材质合并（合批）的，另外一块记不清了，可能还有一些其他内容，留给大家自己去探索。", "这些网页的价值：把长文档中的抽象算法变成可以打开、浏览、检查和复现的中间态与结果——它们是研究结论的可验证证据，而不是装饰性的演示页面。"]}}, {"no": 38, "images": [], "speech": {"time": "01:07:10", "paras": ["这个是 Demo 的展示，刚才大家已经看过了。"]}, "demo": "interactive-demo/index.html", "demo_full": true}, {"no": 39, "images": [{"src": "images/slide39-1.png", "x": 0.0, "y": 0.0, "w": 100.0, "h": 100.0}], "speech": {"time": "01:07:10–01:12:28", "paras": ["最后跟大家讨论一下：我还是觉得现在是一个非常重要的转折点——PCG 技术在 AI 时代变化的一个非常重要的转折点。我们首先要做的肯定是了解背景、去学习，最终希望能够为我们下一步 PCG 的发展方向和行动纲领定下来。这是需要每一个 PCG 相关同学去做的事情。", "今天的介绍里，已经把 Texture 生成、Mesh、Seed 的机制（比如像雨果这样的同学要生成整个场景就会用到）、模型如何自己去 Critic、去做 Fix 的整个流程，都尽可能粗粒度地讲了一遍。下一步肯定会有很多同学去做 Demo 的重现、自己去搭类似的场景，我觉得这是好的，但这不是我们的目的。", "我们的目的是：把刚才所有这些能力和流程、方法论——可能要去向 AI 学习——沉淀成稳定的算子接口、确定性的流程、最后审核-Fix 这样的高级流程，沉淀出这些可以复用的算子；是不是要去做一些 Agent 的 Skill，都是 OK 的；逐步去积累我们在 Agent 时代的 PCG 算法。", "长期价值：我们的长期价值肯定不是为了生成一个单一的场景、生成一个城市，或者生成这样十个 FPS 场景。作为技术的中台，我们是希望能够建立一条未来能够持续生产场景、持续验证场景质量、能自己不断迭代往上走的新的 PCG 技术路线。今天所有的这些 Demo，我认为都只是一个起点：它证明了一个非常重大的跳跃和跨越——从零资产、端到端的、我原先比较反对的许愿式的 PCG 内容生产方式。这样的一个新的 PCG 变革，为后续我们规模化地做 PCG 基础设施的建设，提供了很多的想法和方向的指引；也希望相关同学都能去思考上面的整个材料。", "致谢：这个 Demo 和可视化交互是我做的，但整个的思想其实都是来自 Kelvin——Kevin 做了这个 Demo，也输出了基本上最多的想法——是和 Kevin、海榕、Anders 一起讨论出来的，其中也有一些和雨果讨论的内容。非常感谢相关同学在 PPT 形成的过程中提供的支持。", "时间点与行动：从 OPUS 的 Claude of Duty 这个 Demo 到现在，已经过去三周了，我觉得现在还不算晚。我本来上周末已经准备好了，但因为上周各种管理上的事情特别多，没有时间给大家讲，只能尽可能快地补上。AI 时代可能每几周、每个月都会有新的东西，希望大家能够快点行动起来，看一下新的 Agent 和多模态模型发展的情况下，PCG 后续会往哪些方向发展。我们需要更加重视：PCG 这个领域的端到端能力，可能已经是一个临界的突破点；后续如何更好地用好这些端到端的能力，去做包括摆放、PCG 生成、白膜生成等等一系列事情，希望大家都能重新 Review 一下。", "后续安排：刚才点名了雨果，希望雨果准备一下。也点一下 Kevin：你是具体来做内容的，可以看一下后续每个场景的生产和迭代，给大家详细讲一下 Build、Critic、Fix、Verify 这个详细流程，更可视化地去讲——比如一开始这个场景有多粗糙：你当时给我们讲的地铁那个场景，一开始可能根本就不对、破损的都不对，它会自动去让隧道破损等等，整个过程可以给大家讲讲，让大家更加了解新的 Agent 发展方向的一些变化。另外 Kevin 的 Operation Blackout 在内部也建一个 Git，我就不复制你的内容了；到时候我发一个材料引用你的就可以。我的材料也会放到一个 Git 上发到群里——包括我分析的一些中间 Markdown 文件、PPT、交互 Demo 都会发出来，大家都可以去看。", "结束语：希望这个简单、快速的分享，能让大家学到东西。拥抱 AIGC 的时代——现在变化太快了。"]}}];
+const $ = id => document.getElementById(id);
+let cur = 0;
+
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>");}
+
+let caroTimer = null;
+function stopCaro(){
+  if(caroTimer){ clearInterval(caroTimer); caroTimer = null; }
+  const st = $("stage"); if(st) st.onclick = null;
+}
+function startCaro(){
+  const stage = $("stage");
+  const imgs = [...stage.querySelectorAll("img.caro")];
+  if(!imgs.length) return;
+  const dots = document.createElement("div");
+  dots.className = "caro-dots";
+  imgs.forEach(()=>dots.appendChild(document.createElement("i")));
+  const hint = document.createElement("div");
+  hint.className = "caro-hint";
+  hint.textContent = "点击切换 · 自动轮播";
+  stage.appendChild(dots); stage.appendChild(hint);
+  let k = 0;
+  const show = i => {
+    k = (i + imgs.length) % imgs.length;
+    imgs.forEach((el,j)=>{
+      if(j === k && !el.getAttribute("src")) el.src = el.dataset.src;
+      el.classList.toggle("on", j === k);
+    });
+    [...dots.children].forEach((d,j)=>d.classList.toggle("on", j === k));
+  };
+  const intervalMs = Number(stage.dataset.carouselIntervalMs) || 5000;
+  const arm = () => { if(caroTimer) clearInterval(caroTimer); caroTimer = setInterval(()=>show(k+1), intervalMs); };
+  show(0); arm();
+  dots.onclick = e => { if(e.target.tagName === "I"){ show([...dots.children].indexOf(e.target)); arm(); } };
+  stage.onclick = e => { if(e.target.tagName !== "I"){ show(k+1); arm(); } };
+}
+
+function openDemo(src){
+  closeDemo();
+  const stage = $("stage");
+  const layer = document.createElement("div");
+  layer.className = "demo-layer";
+  const load = document.createElement("div");
+  load.className = "demo-loading";
+  load.textContent = "交互 Demo 加载中…";
+  const fr = document.createElement("iframe");
+  fr.src = src;
+  fr.title = "交互演示";
+  fr.onload = () => { fr.classList.add("ready"); load.remove(); };
+  const x = document.createElement("button");
+  x.className = "demo-close";
+  x.innerHTML = "&#10005; 关闭演示";
+  x.onclick = closeDemo;
+  layer.appendChild(load);
+  layer.appendChild(fr);
+  layer.appendChild(x);
+  stage.appendChild(layer);
+}
+function closeDemo(){
+  document.querySelectorAll(".demo-layer").forEach(el=>el.remove());
+}
+
+function renderToc(){
+  const box = $("tocList");
+  box.innerHTML = SLIDES.map((s,i)=>{
+    const sp = (s.speech && s.speech.paras && s.speech.paras.length) ? s.speech.paras[0] : "";
+    const t = sp ? sp.slice(0,22) : "（无实录）";
+    return `<a href="#" data-i="${i}" class="${i===cur?"cur":""}"><span class="n">${String(s.no).padStart(2,"0")}</span><span>${esc(t)}</span></a>`;
+  }).join("");
+  box.querySelectorAll("a").forEach(a=>{
+    a.onclick = e => { e.preventDefault(); go(+a.dataset.i); closeToc(); };
+  });
+}
+function render(){
+  const s = SLIDES[cur];
+  const stage = $("stage");
+  const load = $("loading");
+  load.style.opacity = 1;
+  stopCaro();
+  stage.dataset.carouselIntervalMs = s.carousel ? String(s.carousel_interval_ms || 5000) : "";
+  stage.querySelectorAll("img").forEach(im=>im.remove());
+  stage.querySelectorAll(".caro-dots,.caro-hint,.demo-btn,.demo-layer").forEach(el=>el.remove());
+  let pending = s.carousel ? 0 : s.images.length;
+  s.images.forEach((im,idx)=>{
+    const el = document.createElement("img");
+    el.alt = "Slide " + s.no;
+    el.style.left = im.x + "%"; el.style.top = im.y + "%";
+    el.style.width = im.w + "%"; el.style.height = im.h + "%";
+    if(s.carousel){
+      el.classList.add("caro");
+      el.dataset.src = im.src;
+      if(idx === 0){
+        el.onload = el.onerror = () => { load.style.opacity = 0; };
+        el.src = im.src;
+      }
+    } else {
+      el.src = im.src;
+      el.onload = el.onerror = () => { if(--pending === 0) load.style.opacity = 0; };
+    }
+    stage.appendChild(el);
+  });
+  if(!pending) load.style.opacity = 0;
+  if(s.demo_full){
+    openDemo(s.demo);
+  } else if(s.demo){
+    const b = document.createElement("button");
+    b.className = "demo-btn";
+    b.innerHTML = "&#9654; 交互演示";
+    b.onclick = e => { e.stopPropagation(); openDemo(s.demo); };
+    stage.appendChild(b);
+  }
+  const regions = s.demo_regions || (s.demo_region ? [s.demo_region] : []);
+  regions.forEach(r=>{
+    const b = document.createElement("button");
+    b.className = "demo-btn demo-region";
+    b.textContent = r.label || "交互演示";
+    b.title = r.label || "打开交互演示";
+    b.setAttribute("aria-label", b.title);
+    b.style.left = r.x + "%";
+    b.style.top = r.y + "%";
+    b.style.width = r.w + "%";
+    b.style.height = r.h + "%";
+    b.onclick = e => { e.stopPropagation(); openDemo(r.src); };
+    stage.appendChild(b);
+  });
+  const nb = $("notesBody");
+  const sp = s.speech;
+  nb.innerHTML = (sp && sp.paras && sp.paras.length)
+    ? `<div class="speech-head">演讲实录${sp.time ? `<span class="tm">${sp.time}</span>` : ""}</div>`
+      + sp.paras.map(n=>`<p class="sp">${md(n)}</p>`).join("")
+    : `<p class="empty">本页无演讲实录</p>`;
+  nb.scrollTop = 0;
+  $("cur").textContent = s.no;
+  $("prev").disabled = cur === 0;
+  $("next").disabled = cur === SLIDES.length - 1;
+  if(s.carousel) startCaro();
+  document.title = `OPUS-PCG-v5 · 第 ${s.no}/${SLIDES.length} 页`;
+  history.replaceState(null, "", "#" + s.no);
+  renderToc();
+  const nx = SLIDES[cur+1], pv = SLIDES[cur-1];
+  if(nx) nx.images.forEach(im => { const i = new Image(); i.src = im.src; });
+  if(pv) pv.images.forEach(im => { const i = new Image(); i.src = im.src; });
+}
+function go(i){
+  if(i < 0 || i >= SLIDES.length || i === cur) return;
+  cur = i; render();
+}
+function openToc(){ $("toc").classList.add("open"); $("tocMask").classList.add("show"); }
+function closeToc(){ $("toc").classList.remove("open"); $("tocMask").classList.remove("show"); }
+
+$("prev").onclick = () => go(cur-1);
+$("next").onclick = () => go(cur+1);
+$("btnToc").onclick = openToc;
+$("tocClose").onclick = closeToc;
+$("tocMask").onclick = closeToc;
+document.addEventListener("keydown", e => {
+  if(e.key === "ArrowRight" || e.key === " " || e.key === "PageDown"){ e.preventDefault(); go(cur+1); }
+  else if(e.key === "ArrowLeft" || e.key === "PageUp"){ e.preventDefault(); go(cur-1); }
+  else if(e.key === "Home"){ go(0); }
+  else if(e.key === "End"){ go(SLIDES.length-1); }
+  else if(e.key === "Escape"){ closeToc(); closeDemo(); }
+});
+$("total").textContent = SLIDES.length;
+$("tocCount").textContent = "目录 · " + SLIDES.length + " 页";
+const h = parseInt(location.hash.slice(1));
+if(h >= 1 && h <= SLIDES.length) cur = h - 1;
+render();
+window.addEventListener("hashchange", () => {
+  const n = parseInt(location.hash.slice(1));
+  if(n >= 1 && n <= SLIDES.length && n - 1 !== cur){ cur = n - 1; render(); }
+});
+</script>
+</body>
+</html>

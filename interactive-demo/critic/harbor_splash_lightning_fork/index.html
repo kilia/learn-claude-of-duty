@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build → Critic → Fix · Harbor Splash / Lightning RNG Fork</title>
+<style>
+  :root {
+    --bg: #0c0f12;
+    --panel: #151a20;
+    --panel2: #1a2129;
+    --line: #2c3640;
+    --text: #d8dee6;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --good: #7ec99a;
+    --bad: #e08a7a;
+    --splash: #6eb6d9;
+    --bolt: #e8d27a;
+    --snow: #b8c8d8;
+    --rain: #5a9bb8;
+    --drip: #8aaf9a;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #1a2430 0%, transparent 55%),
+      radial-gradient(900px 500px at 90% 0%, #1e1814 0%, transparent 50%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 36px 22px 80px; }
+  header.hero {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: linear-gradient(160deg, #1a222b 0%, #12171c 70%);
+    padding: 28px 28px 24px;
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    color: var(--accent); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; margin: 0 0 8px;
+  }
+  h1 {
+    font-size: 1.55rem; font-weight: 650; margin: 0 0 10px;
+    letter-spacing: 0.01em; line-height: 1.3;
+  }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 52em; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .chip {
+    font-size: 12px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: #0e1216;
+  }
+  .chip strong { color: var(--text); font-weight: 600; }
+  nav.toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px;
+  }
+  nav.toc a {
+    color: var(--muted); text-decoration: none; font-size: 12.5px;
+    border: 1px solid var(--line); padding: 6px 11px; border-radius: 6px;
+    background: var(--panel);
+  }
+  nav.toc a:hover { color: #fff; border-color: var(--accent); }
+  section {
+    margin-bottom: 36px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  section > .hd {
+    padding: 16px 22px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel2);
+  }
+  section > .hd h2 {
+    margin: 0 0 4px; font-size: 1.12rem; font-weight: 650;
+  }
+  section > .hd p { margin: 0; color: var(--muted); font-size: 13px; }
+  section > .bd { padding: 20px 22px 24px; }
+  h3 {
+    font-size: 0.98rem; margin: 22px 0 10px; font-weight: 650;
+    color: #e8eef4;
+  }
+  h3:first-child { margin-top: 0; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: #10161c;
+    padding: 12px 14px;
+    margin: 14px 0;
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+  }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
+  .grid2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 760px) {
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: #10161c; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 14px 12px;
+  }
+  .card h4 {
+    margin: 0 0 8px; font-size: 13px; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+  }
+  .card.bad { border-color: #5a3a36; }
+  .card.good { border-color: #2f4a3a; }
+  pre, .code {
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    font-size: 12px; line-height: 1.5;
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+    color: #b8c4ce; margin: 10px 0 0;
+  }
+  .src {
+    font-size: 11.5px; color: var(--muted); margin-top: 6px;
+  }
+  .src code { color: var(--accent); }
+  ol.phases {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; gap: 12px;
+  }
+  ol.phases > li {
+    display: grid; grid-template-columns: 56px 1fr; gap: 14px;
+    align-items: start;
+    background: #10161c; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px;
+  }
+  .phase-n {
+    width: 56px; height: 56px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.02em;
+  }
+  .p-build { background: #1e2a24; color: var(--good); border: 1px solid #355043; }
+  .p-crit  { background: #2a2418; color: var(--accent); border: 1px solid #5a4a30; }
+  .p-fix   { background: #1a2430; color: var(--splash); border: 1px solid #355060; }
+  .p-ver   { background: #241c28; color: #c9a0d8; border: 1px solid #4a3855; }
+  .phase-body h4 { margin: 0 0 6px; font-size: 15px; }
+  .phase-body p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .phase-body ul {
+    margin: 8px 0 0; padding-left: 1.15em; color: var(--text); font-size: 13.5px;
+  }
+  /* ---- stream diagrams ---- */
+  .viz {
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 14px 12px; margin: 12px 0;
+  }
+  .viz-title {
+    font-size: 12px; color: var(--muted); margin: 0 0 12px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .stream {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    margin-bottom: 10px; min-height: 36px;
+  }
+  .tok {
+    font-size: 11.5px; font-family: ui-monospace, Consolas, monospace;
+    padding: 5px 8px; border-radius: 5px; border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  .tok.splash { background: #163040; color: var(--splash); border-color: #2a5570; }
+  .tok.bolt   { background: #2e2a14; color: var(--bolt); border-color: #6a5a28; }
+  .tok.rain   { background: #142830; color: var(--rain); border-color: #2a4a58; }
+  .tok.drip   { background: #1a2c24; color: var(--drip); border-color: #2f4e40; }
+  .tok.snow   { background: #222830; color: var(--snow); border-color: #3a4555; }
+  .tok.ghost  { background: #1a1e22; color: #556068; border-color: #2a3238; opacity: 0.55; }
+  .tok.shift  {
+    background: #3a201c; color: var(--bad); border-color: #6a3a34;
+    box-shadow: 0 0 0 1px rgba(224,138,122,0.25);
+  }
+  .tok.ok {
+    background: #1a2e24; color: var(--good); border-color: #355043;
+  }
+  .arrow { color: var(--muted); font-size: 12px; }
+  .legend-row {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px;
+    font-size: 12px; color: var(--muted);
+  }
+  .dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    margin-right: 5px; vertical-align: 1px;
+  }
+  /* ---- order pipeline ---- */
+  .pipe {
+    display: flex; flex-wrap: wrap; gap: 0; align-items: stretch;
+    margin: 10px 0 4px;
+  }
+  .pipe .step {
+    flex: 1 1 90px; min-width: 88px;
+    padding: 10px 8px; text-align: center;
+    border: 1px solid var(--line); background: #10161c;
+    font-size: 11.5px; position: relative;
+  }
+  .pipe .step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe .step:last-child { border-radius: 0 8px 8px 0; }
+  .pipe .step + .step { border-left: none; }
+  .pipe .step .n {
+    display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px;
+  }
+  .pipe .step.frozen { outline: 1px dashed #4a6348; outline-offset: -3px; }
+  .pipe .step.appended {
+    background: #1a2430; border-color: #3a5568; color: var(--snow);
+    border-left: 1px solid #3a5568 !important;
+  }
+  .pipe-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  /* ---- fork diagram ---- */
+  .fork-svg { width: 100%; height: auto; display: block; }
+  table.compare {
+    width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px;
+  }
+  table.compare th, table.compare td {
+    border: 1px solid var(--line); padding: 8px 10px; text-align: left;
+    vertical-align: top;
+  }
+  table.compare th { background: #10161c; color: var(--muted); font-weight: 600; }
+  table.compare td.bad { color: var(--bad); }
+  table.compare td.good { color: var(--good); }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 0 0 12px;
+  }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 7px 12px; cursor: pointer; font: inherit;
+    font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.active { background: #2a3428; border-color: #4a6348; }
+  .foot {
+    margin-top: 8px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  kbd {
+    font: 11px ui-monospace, Consolas, monospace;
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 5px; color: var(--accent);
+  }
+  blockquote.shot {
+    margin: 0 0 14px;
+    padding: 16px 18px;
+    background: #0a0d10;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    color: #cdd6df;
+    font-size: 14px;
+    line-height: 1.7;
+    font-style: italic;
+  }
+  blockquote.shot cite {
+    display: block;
+    margin-top: 10px;
+    font-style: normal;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .fail-list {
+    margin: 8px 0 0;
+    padding-left: 1.2em;
+    font-size: 13.5px;
+  }
+  .fail-list li { margin-bottom: 5px; }
+  .fail-list li::marker { color: var(--bad); }
+  .prompt-box {
+    background: #0a0d10;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #b8c4ce;
+    white-space: pre-wrap;
+    margin: 10px 0 0;
+  }
+  .contract-table td:first-child {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    color: var(--accent);
+    white-space: nowrap;
+    width: 34%;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    margin-right: 6px;
+    vertical-align: 1px;
+  }
+  .tag.ad { border-color: #5a4a30; color: var(--accent); }
+  .tag.api { border-color: #355060; color: var(--splash); }
+  .tag.rng { border-color: #4a6348; color: var(--good); }
+  .tag.crit { border-color: #6a3a34; color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">survey/critic · 案例报告</p>
+  <h1>Harbor：改 Splash 速率 → Critic A/B 失效 → Fork 隔离闪电 / 雪</h1>
+  <p class="lede">
+    这是仓库里把「Build → Critic → Fix」与「随机流副作用」绑在同一条因果链上的真实病例。
+    Build agent 在同一条顺序 RNG 上生成雨、水花与闪电；某次只调 splash rate 的 Fix，
+    却让 <kbd>lightning</kbd> 截图拍到另一场雷——Critic 的指标动了，原因却与被测改动无关。
+    最终 Fix：<strong>fork 出独立流</strong>，新能力（雪）<strong>只追加在构建序列末尾</strong>，
+    且绝不重排 harbor 已冻结的雨块顺序。
+  </p>
+  <div class="meta">
+    <span class="chip"><strong>源码</strong> src/fx/weather.js</span>
+    <span class="chip"><strong>Art Dir</strong> ART_DIRECTION_HARBOR.md</span>
+    <span class="chip"><strong>Critic</strong> round4-workflow.js</span>
+    <span class="chip"><strong>机制</strong> GAME.RNG.fork(salt)</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#artdir">1. Art Direction 原文</a>
+  <a href="#contract">2. Published Contracts</a>
+  <a href="#critic-brief">3. Critic Prompt / Schema</a>
+  <a href="#loop">4. 闭环时间线</a>
+  <a href="#symptom">5. Critic 看见了什么</a>
+  <a href="#contam">6. 流污染可视化</a>
+  <a href="#fork">7. Fork 如何消副作用</a>
+  <a href="#append">8. 末尾追加 / 保序</a>
+  <a href="#agent">9. 对 Build/Fix agent 的含义</a>
+</nav>
+
+<!-- ============================================================ -->
+<section id="artdir">
+  <div class="hd">
+    <h2>1. Art Direction 原文（Cold Harbor）</h2>
+    <p>Build / Critic 共用的视觉合同来自 <code>ART_DIRECTION_HARBOR.md</code>——不是“下雨好看一点”，而是可验收的画面。</p>
+  </div>
+  <div class="bd">
+    <p><span class="tag ad">art direction</span>相对 Market 的对立轴（节选）：</p>
+    <table class="compare">
+      <thead>
+        <tr><th></th><th>Market (L1)</th><th>Cold Harbor (L2)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Time</td><td>Golden hour</td><td><strong>Night, 02:00</strong></td></tr>
+        <tr><td>Weather</td><td>Hot, dry, dusty</td><td><strong>Heavy rain, storm</strong></td></tr>
+        <tr><td>Key light</td><td>Low raking sun</td><td><strong>Sodium/mercury practicals + lightning</strong></td></tr>
+        <tr><td>Surfaces</td><td>Dusty, matte, chalky</td><td><strong>Wet, glossy, reflective</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>The shot we are chasing</h3>
+    <blockquote class="shot">
+      A container terminal at two in the morning, in driving rain. Sodium lamps on
+      tall masts throw hard orange cones through the downpour — you can see the rain
+      falling <em>through</em> the light. Everything is soaked: the concrete apron is a
+      black mirror holding stretched reflections of every lamp, and the puddles
+      ripple as drops hit them. Stacked shipping containers form dark canyons in
+      faded red, blue and green, their corrugated flanks streaked with rust weeping
+      from every weld. A gantry crane looms overhead, its legs disappearing into
+      low cloud. Beyond the quay edge, black water and the hull of a moored
+      freighter. Every few seconds, lightning flashes the entire scene cold blue-white
+      for a fraction of a second, freezing the rain mid-air and throwing hard
+      shadows in a completely different direction from the lamps — then it is dark
+      again and your eye has to re-adapt.
+      <cite>— ART_DIRECTION_HARBOR.md · “The shot we are chasing”</cite>
+    </blockquote>
+    <p class="muted"><strong>Wet is the whole look.</strong> Level 1 用尘卖大气；本关用水：反射、高光、对比承担原先 haze 的工作。</p>
+
+    <h3>Lighting recipe（non-negotiable）</h3>
+    <table class="compare">
+      <thead><tr><th>Element</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Ambient sky</td><td>Very low, cold. Overcast storm cloud, no stars, no moon disc</td></tr>
+        <tr><td>Practicals</td><td>Sodium mast ~2000K deep orange; mercury/LED floods ~5600K cold</td></tr>
+        <tr><td>Practical falloff</td><td>Hard. Pools of light with genuine darkness between them</td></tr>
+        <tr><td>Lightning</td><td>3–8s interval, 60–180ms, cold ~7000K, varying direction, <strong>casts real shadows</strong></td></tr>
+        <tr><td>Fog</td><td>Dense low fog + rain scatter. Lamp cones must be visible volumetrically</td></tr>
+        <tr><td>Contrast / Exposure</td><td>HIGH near-blacks OK but never crushed to zero · mean luminance ~0.10–0.18</td></tr>
+      </tbody>
+    </table>
+    <div class="callout">
+      <strong>Single most important effect：</strong> light cone through rain。
+      倾盆大雨里桅杆灯没有可见体积光锥 = 直接 fail。
+    </div>
+
+    <h3>Instant-fail list（艺术方向硬拒收）</h3>
+    <ul class="fail-list">
+      <li>Rain as a flat 2D screen overlay</li>
+      <li>Lamps with no visible volumetric cone in the downpour</li>
+      <li>Wet ground that is not reflective, or reflections that are just a blur</li>
+      <li><strong>Lightning as a full-screen white fade with no directional shadow change</strong></li>
+      <li>Containers that are flat-coloured boxes with no corrugation / rust / hardware / stencils</li>
+      <li>A flat, uniformly-lit scene — this level lives on pools of light and darkness</li>
+      <li>Crushed pure-black shadows with no detail whatsoever</li>
+      <li>Reusing the market's warm ochre palette</li>
+      <li>Puddles that do not ripple in the rain</li>
+    </ul>
+    <p class="src">全文：<code>ART_DIRECTION_HARBOR.md</code> · 另见 <code>ARCHITECTURE.md</code> §9 Quality bar（COD 对照即时拒收项）</p>
+
+    <div class="callout bad">
+      本案例与艺术方向的交点：闪电必须是<strong>可复现的方向光事件</strong>
+      （bearing / elevation / distance → <code>flashDir</code> + 真阴影）。
+      若 splash 调参悄悄换了一场雷，Critic 就无法判断闪电是否满足
+      “varying direction, casts real shadows”——A/B 评的是另一张图。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="contract">
+  <div class="hd">
+    <h2>2. Published Contracts（谁写、谁读、写什么）</h2>
+    <p>三个互相咬合的合同：Weather API · Art-dir 交付物清单 · 确定性 / RNG 纪律。</p>
+  </div>
+  <div class="bd">
+    <h3><span class="tag api">API</span> Weather 模块头注释（权威实现合同）</h3>
+    <p class="muted"><code>GAME.Weather</code> <strong>owns</strong> the weather contract；其它系统只读不写。每个字段在每个 preset 上都存在且为有限数。</p>
+    <table class="compare contract-table">
+      <thead><tr><th>Field</th><th>语义</th></tr></thead>
+      <tbody>
+        <tr><td>weather.wetness</td><td>0..1 全局表面湿润</td></tr>
+        <tr><td>weather.rainIntensity</td><td>0..1 <strong>仅液态降水</strong>（暴雪里必须为 0，否则雪关会变成湿沥青）</td></tr>
+        <tr><td>weather.windDir</td><td>THREE.Vector2，归一化（x=world X, y=world Z）</td></tr>
+        <tr><td>weather.windSpeed</td><td>m/s</td></tr>
+        <tr><td>weather.flash</td><td>0..1 本帧闪电强度（多数帧为 0）</td></tr>
+        <tr><td>weather.flashDir</td><td>THREE.Vector3，指向闪光；与 <code>sky.sunDirection</code> 同约定，可做 Lambert</td></tr>
+        <tr><td>weather.fogDensity</td><td>当前天空暗示的消光系数（per-metre）</td></tr>
+        <tr><td>weather.setPreset(n)</td><td><code>'clear' | 'storm' | 'drizzle' | 'blizzard'</code></td></tr>
+        <tr><td>weather.strike()</td><td>立刻强制一次闪电（捕获确定性）</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px;" class="muted">可选扩展（precipitation-kind agnostic；旧消费者仍可只读上面七项）：</p>
+    <table class="compare contract-table">
+      <thead><tr><th>Field</th><th>语义</th></tr></thead>
+      <tbody>
+        <tr><td>weather.snowIntensity</td><td>0..1 固态降水</td></tr>
+        <tr><td>weather.precipIntensity</td><td>max(rain, snow) — “下得有多猛”</td></tr>
+        <tr><td>weather.precipitation</td><td><code>'none' | 'rain' | 'snow'</code></td></tr>
+      </tbody>
+    </table>
+    <pre>// WHY rainIntensity IS ZERO IN A BLIZZARD
+// materials.js feeds it (with wetness) into the wet contract: film thickness,
+// puddle coverage, ripple amplitude. Publishing snow through it would render
+// Kirovsk Pass on wet asphalt.
+//
+// LEVEL 1 SAFETY: non-harbor preset is 'clear' = *absent* — no geometry,
+// no texture, no light, nothing on the market frame.</pre>
+    <p class="src"><code>src/fx/weather.js</code> 文件头（L4–L41）</p>
+
+    <h3><span class="tag ad">art direction</span> 要求 Weather 必须交付的效果</h3>
+    <p class="muted">来自 <code>ART_DIRECTION_HARBOR.md</code> · Weather contract · “Required from weather.js”：</p>
+    <ul class="fail-list" style="list-style: disc;">
+      <li><strong>Rain</strong> — instanced/point streaks, camera-relative volume, wind-sheared, depth parallax; visible against dark AND lamp cones</li>
+      <li><strong>Splash</strong> — impact ring particles where rain meets ground and props</li>
+      <li><strong>Puddle ripples</strong> — animated normal perturbation on wet ground</li>
+      <li><strong>Lightning</strong> — real directional light flash, not a screen fade; must cast shadows; thunder after plausible delay</li>
+      <li><strong>Rain on the lens</strong> — subtle edge droplet distortion; restrained</li>
+      <li><strong>Drips</strong> — water off container edges, ledges, crane</li>
+    </ul>
+
+    <h3><span class="tag rng">determinism</span> 确定性 / RNG 合同（本病例直接违反又修好的那条）</h3>
+    <table class="compare">
+      <thead><tr><th>条款</th><th>出处 / 含义</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>禁止 <code>Math.random()</code></td>
+          <td><code>DEVELOPMENT.md</code> / <code>ARCHITECTURE.md</code> — 捕获必须可复现，否则 critique 无价值</td>
+        </tr>
+        <tr>
+          <td>同 seed → 同帧</td>
+          <td>Capture API：<code>?scenario=&amp;level=&amp;t=&amp;seed=</code> 固定 1/60 推进到 t</td>
+        </tr>
+        <tr>
+          <td>子系统 <code>fork(salt)</code> 不推进父流</td>
+          <td><code>util.js</code> · weather 用 <code>lrng</code>/<code>srng</code> 隔离闪电与雪</td>
+        </tr>
+        <tr>
+          <td>雨构建顺序冻结</td>
+          <td>harbor 原序；重排会移动每个 drip edge / splash</td>
+        </tr>
+        <tr>
+          <td>新能力末尾追加</td>
+          <td>snow 挂在序列尾，且走独立 <code>srng</code></td>
+        </tr>
+        <tr>
+          <td>Market canary</td>
+          <td>非 harbor 上 weather 为 clear/absent，不得让共享改动污染 L1 帧</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout good">
+      <strong>合同如何咬合：</strong>Art Direction 要求闪电“方向变化 + 真阴影”；
+      Weather API 用 <code>flash</code>/<code>flashDir</code>/<code>strike()</code> 发布；
+      RNG 合同保证同 seed 下这些方向可复现。本病例打断的是第三环——
+      splash 多抽导致 flashDir 序列漂了，前两环的验收全部落空。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="critic-brief">
+  <div class="hd">
+    <h2>3. Critic 的要求原文（Prompt + Schema + 结构约束）</h2>
+    <p>审查者不看 fixer 的 PNG；对照已发售 AAA，不对照“自己上一轮”。</p>
+  </div>
+  <div class="bd">
+    <h3><span class="tag crit">role</span> Round-4 Critic agent 提示词（原文）</h3>
+    <p class="muted">摘自 <code>docs/round4-workflow.js</code> Critique 相位（关卡 id 在运行时替换）。本病例的验证精神与此一致：重拍、读图、跑指标、读源码。</p>
+    <div class="prompt-box">You are a BRUTALLY HARSH art director who has shipped AAA shooters. You are
+reviewing &lt;level&gt; after its FOURTH round. …
+
+Levels 1 and 2 plateaued at 49-52 after four rounds each. Grade against a shipped
+title, not against this level's own past, and do not inflate for effort.
+
+Capture the full published set with --tag &lt;id&gt;crit (lv_overview, lv_hero1,
+lv_hero2, lv_hero3, lv_interior, lv_firefight), READ every PNG at full size and at
+2x on anything you intend to criticise, and run analyze.py on each. GATE ON
+coverage.dead_cell_med_pct (&lt; 12), not the saturated dead_cell_pct.
+
+Read the level and props source behind everything you criticise. … the most
+valuable findings came from reading source and probing the live scene rather
+than from looking at pixels alone …
+
+hero1 is the signature image. Judge it hardest.
+
+… is this level still blocked by a shared system, or is the remaining gap now
+genuinely its own? Put that in sharedSystemStillBlocking. …
+
+Report a blunt verdict, a score, what moved and what did not since round 3, the
+single biggest remaining gap, and findings each naming ONE owning file with a
+concrete technical remedy. State plainly whether this level is genuinely
+presentable or still reads as a tech demo, and why.</div>
+
+    <h3>强制输出 Schema</h3>
+    <pre>CRITIC_SCHEMA = {
+  required: ['level', 'score', 'verdict', 'presentable'],
+  properties: {
+    level, score, verdict,
+    movedSinceRound3, biggestRemainingGap,
+    presentable,                 // boolean — 至今从未有关卡返回 true
+    sharedSystemStillBlocking,
+    findings: [{
+      file,                      // ONE owning file
+      severity: 'critical'|'major'|'minor',
+      issue,                     // 可定位的问题
+      fix                        // 具体技术补救，不是 “make it nicer”
+    }]
+  }
+}</pre>
+    <p class="src"><code>docs/round4-workflow.js</code> · <code>CRITIC_SCHEMA</code></p>
+
+    <h3>结构约束（为何与 Fixer 拆开）</h3>
+    <table class="compare">
+      <thead><tr><th>约束</th><th>失败教训</th></tr></thead>
+      <tbody>
+        <tr><td>不同 agent，不自评</td><td>自评评的是意图，不是像素</td></tr>
+        <tr><td>自有 <code>--tag</code> 重拍</td><td>继承 fixer PNG = 审对方的声称</td></tr>
+        <tr><td>全尺寸 + 拟批评处 2×</td><td>碎石块 / 漂浮落叶在 100% 不可见</td></tr>
+        <tr><td>批评前读源码 / 探 scene</td><td>最高价值发现图里看不见</td></tr>
+        <tr><td>对照 shipped title，不对照本关历史</td><td>否则分数漂移、画面不动</td></tr>
+        <tr><td>finding = 一文件 + 一具体 fix</td><td>“It feels flat” 不可执行</td></tr>
+      </tbody>
+    </table>
+    <p class="src"><code>docs/technical-writeup.md</code> § “The critic is structurally separated from the fixer”</p>
+
+    <h3>对本病例，Critic / Verify 会写成什么样的 finding</h3>
+    <div class="grid2">
+      <div class="card bad">
+        <h4>污染未修时（无效 A/B）</h4>
+        <pre style="margin-top:0;border:none;padding:0;background:transparent;">severity: critical
+file:    src/fx/weather.js
+issue:   Changing splash rate moves lightning
+         bearing/elevation/distance in the
+         `lightning` capture; analyze.py deltas
+         are not attributable to splash.
+fix:     Isolate strike scheduling onto a
+         forked RNG (do not share the splash
+         stream); freeze rain build order.</pre>
+      </div>
+      <div class="card good">
+        <h4>对照 Art Direction 的验收点</h4>
+        <ul>
+          <li>闪电非全屏白闪（instant-fail）</li>
+          <li><code>flashDir</code> 可变且投阴影</li>
+          <li>同 seed 重拍方位稳定 → 才能评体积光锥 / 湿反射</li>
+          <li>Splash 密度可调而不毒死上述任一条款</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>ARCHITECTURE §9 Quality bar（全局即时拒收）</h3>
+    <ul class="fail-list">
+      <li>Flat untextured or single-color surfaces</li>
+      <li>Visible texture tiling/repetition</li>
+      <li>Hard-edged aliased shadows, or shadow acne</li>
+      <li>Blown-out or crushed exposure</li>
+      <li>Gun that looks like grey boxes · Muzzle flash that is a white sphere</li>
+      <li>Enemies that are capsules or stiff mannequins</li>
+      <li>Empty geometry with no props, clutter, or wear</li>
+      <li>Perfectly straight, perfectly clean, perfectly uniform anything</li>
+      <li>Static, dead lighting with no atmosphere/depth cueing</li>
+    </ul>
+    <p class="muted" style="margin-top:8px;">Aim for: <strong>grounded, gritty, photographic, with atmospheric depth.</strong></p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="loop">
+  <div class="hd">
+    <h2>4. Build → Critic → Fix 时间线</h2>
+    <p>角色拆开：生成者、审查者、修复者；证据是可复现截图，不是“感觉更好了”。</p>
+  </div>
+  <div class="bd">
+    <ol class="phases">
+      <li>
+        <div class="phase-n p-build">BUILD</div>
+        <div class="phase-body">
+          <h4>港口天气系统落成</h4>
+          <p>Weather 从 <code>ctx.rng.fork(0x5741)</code> 拿到本模块流，按固定顺序构建雨相关资源，
+            闪电日程也从<strong>同一条</strong> <code>this.rng</code> 抽方位 / 仰角 / 距离。</p>
+          <ul>
+            <li>产出可捕获的 <code>lightning</code> / 雨景 framing</li>
+            <li>同一 seed → 同一帧（当时以为如此）</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-crit">CRITIC</div>
+        <div class="phase-body">
+          <h4>审查 / A/B：splash 调参轮</h4>
+          <p>Fix 意图只改水花密度。Critic（或 verify）重拍 <code>lightning</code>，跑 <code>analyze.py</code>。
+            指标移动、构图里雷的方位变了——看起来像“画面退步”。</p>
+          <ul>
+            <li>表面结论：改 splash 伤了闪电观感</li>
+            <li>真正问题：两条捕获不是同一场雷 → <strong>A/B 无效</strong></li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-fix">FIX</div>
+        <div class="phase-body">
+          <h4>结构修复，不是再抽一次运气</h4>
+          <p>不搜“更好的 seed”。在构造函数里、任何 <code>next()</code> 之前：</p>
+          <ul>
+            <li><code>this.lrng = this.rng.fork(0x71A5)</code> — 闪电专用流</li>
+            <li>稍后 <code>this.srng = this.rng.fork(0x53A0)</code> — 雪花专用流</li>
+            <li>雨块调用顺序原样冻结；雪只挂在序列末尾</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-ver">VERIFY</div>
+        <div class="phase-body">
+          <h4>再验证：同 seed 同雷</h4>
+          <p>再改 splash rate / flake count，lightning 方位应字节级稳定；
+            加雪的那一行 fork 不得移动 harbor 已有 drip / splash 的任何一抽。</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="callout">
+      这与关卡美术 Critic（art director 打分）是同一方法论的不同镜头：
+      <strong>证据必须可复现</strong>。RNG 串流一旦污染，Critic 再狠也在评“另一张图”。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="symptom">
+  <div class="hd">
+    <h2>5. Critic 看见了什么（症状）</h2>
+    <p>源码注释里的原话——这是写进 weather.js 的疤痕组织。</p>
+  </div>
+  <div class="bd">
+    <div class="grid2">
+      <div class="card bad">
+        <h4>改之前 · 共享顺序流</h4>
+        <p class="muted">Splash emitter 每帧从主 RNG 抽数十次。闪电日程也吃同一条流。</p>
+        <p>调高 splash rate → 每帧多消耗 N 次 <code>next()</code> →
+          闪电读到的第 k 个样本整体错位。</p>
+      </div>
+      <div class="card">
+        <h4>Critic / 度量读数</h4>
+        <p class="muted">两张 <code>lightning</code> 捕获（改 splash 前后）：</p>
+        <ul>
+          <li>雷的 bearing / elevation / distance 全变</li>
+          <li><code>analyze.py</code> 数字跟着动</li>
+          <li>审查者以为 splash 改坏了闪电</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout bad">
+      <strong>误判：</strong>“splash 调参导致闪电回归。”<br/>
+      <strong>正解：</strong>“你根本没有在 A/B 同一个 strike；度量在比较两场不同的雷。”
+    </div>
+
+    <pre>Every strike used to be drawn from the same RNG the splash emitter pulls from
+tens of times a frame, so changing the splash RATE — a completely unrelated
+tuning value — silently changed the bearing, elevation and distance of the
+strike a capture would photograph. Two `lightning` frames taken either side
+of a splash tweak were not an A/B of the splash tweak, they were two
+different strikes, and the metrics moved for a reason that had nothing to
+do with the edit.</pre>
+    <p class="src">摘自 <code>src/fx/weather.js</code> · Weather 构造函数注释</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="contam">
+  <div class="hd">
+    <h2>6. 顺序流污染 · 交互示意</h2>
+    <p>点「增加 Splash 抽取」看闪电令牌如何被挤到别的值——这就是副作用扩散。</p>
+  </div>
+  <div class="bd">
+    <div class="controls">
+      <button type="button" id="btnBase" class="active">基准：每帧 3 次 splash</button>
+      <button type="button" id="btnMore">Fix 后：每帧 6 次 splash</button>
+      <span class="muted" style="font-size:12.5px;">同一条流 · 同一种子 · 只改消耗次数</span>
+    </div>
+
+    <div class="viz">
+      <p class="viz-title" id="vizLabel">基准流 · splash×3 之后读闪电参数</p>
+      <div class="stream" id="streamViz"></div>
+      <div class="legend-row">
+        <span><i class="dot" style="background:var(--splash)"></i>splash 抽取</span>
+        <span><i class="dot" style="background:var(--bolt)"></i>闪电参数（应稳定）</span>
+        <span><i class="dot" style="background:var(--bad)"></i>错位后的“假闪电”</span>
+      </div>
+    </div>
+
+    <table class="compare">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Splash 消耗</th>
+          <th>闪电读到的流位置</th>
+          <th>捕获是否可比</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>基准</td>
+          <td>3 × next()</td>
+          <td>index 3,4,5 → 方位 A</td>
+          <td class="good">可作对照基准</td>
+        </tr>
+        <tr>
+          <td>只加 splash</td>
+          <td>6 × next()</td>
+          <td>index 6,7,8 → 方位 B</td>
+          <td class="bad">不可比（另一场雷）</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="fork">
+  <div class="hd">
+    <h2>7. Fork：如何避免副作用</h2>
+    <p><code>fork(salt)</code> 从当前状态派生新种子，<strong>不推进父流</strong>。</p>
+  </div>
+  <div class="bd">
+    <svg class="fork-svg" viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="RNG fork diagram">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#8b96a3"/>
+        </marker>
+      </defs>
+      <!-- parent -->
+      <rect x="40" y="130" width="160" height="56" rx="8" fill="#1a2430" stroke="#3a5568"/>
+      <text x="120" y="155" text-anchor="middle" fill="#d8dee6" font-size="14" font-family="Segoe UI,sans-serif">ctx.rng</text>
+      <text x="120" y="173" text-anchor="middle" fill="#8b96a3" font-size="11" font-family="Segoe UI,sans-serif">父流（可被消费）</text>
+
+      <line x1="200" y1="158" x2="270" y2="158" stroke="#8b96a3" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <rect x="270" y="130" width="170" height="56" rx="8" fill="#1e2a24" stroke="#4a6348"/>
+      <text x="355" y="155" text-anchor="middle" fill="#7ec99a" font-size="14" font-family="Segoe UI,sans-serif">weather.rng</text>
+      <text x="355" y="173" text-anchor="middle" fill="#8b96a3" font-size="11" font-family="Segoe UI,sans-serif">fork(0x5741)</text>
+
+      <!-- forks without consuming -->
+      <path d="M440 145 C500 145, 500 60, 560 60" fill="none" stroke="#e8d27a" stroke-width="1.8" marker-end="url(#arrow)"/>
+      <path d="M440 158 C510 158, 510 158, 560 158" fill="none" stroke="#6eb6d9" stroke-width="1.8" marker-end="url(#arrow)"/>
+      <path d="M440 171 C500 171, 500 255, 560 255" fill="none" stroke="#b8c8d8" stroke-width="1.8" marker-end="url(#arrow)"/>
+
+      <rect x="560" y="36" width="200" height="52" rx="8" fill="#2e2a14" stroke="#6a5a28"/>
+      <text x="660" y="58" text-anchor="middle" fill="#e8d27a" font-size="13" font-family="Segoe UI,sans-serif">lrng · lightning</text>
+      <text x="660" y="76" text-anchor="middle" fill="#8b96a3" font-size="11" font-family="Segoe UI,sans-serif">fork(0x71A5) · 不推进父流</text>
+
+      <rect x="560" y="132" width="200" height="52" rx="8" fill="#163040" stroke="#2a5570"/>
+      <text x="660" y="154" text-anchor="middle" fill="#6eb6d9" font-size="13" font-family="Segoe UI,sans-serif">主天气流 · rain/splash</text>
+      <text x="660" y="172" text-anchor="middle" fill="#8b96a3" font-size="11" font-family="Segoe UI,sans-serif">继续 next() 只影响自己</text>
+
+      <rect x="560" y="230" width="200" height="52" rx="8" fill="#222830" stroke="#3a4555"/>
+      <text x="660" y="252" text-anchor="middle" fill="#b8c8d8" font-size="13" font-family="Segoe UI,sans-serif">srng · snow</text>
+      <text x="660" y="270" text-anchor="middle" fill="#8b96a3" font-size="11" font-family="Segoe UI,sans-serif">fork(0x53A0) · 追加能力</text>
+
+      <text x="450" y="300" text-anchor="middle" fill="#8b96a3" font-size="12" font-family="Segoe UI,sans-serif">
+        关键：在任一子系统上多抽 N 次，其它框内的序列不变
+      </text>
+    </svg>
+
+    <pre>RNG.prototype.fork = function (salt) {
+  return new RNG((this._s ^ Math.imul(salt | 0, 0x9E3779B1)) >>> 0);
+};
+
+// Weather 构造函数 — 在第一次 next() 之前分叉
+this.rng  = ctx.rng.fork(0x5741);
+this.lrng = this.rng.fork(0x71A5);  // 闪电
+this.srng = this.rng.fork(0x53A0);  // 雪</pre>
+    <p class="src">实现：<code>src/core/util.js</code> · 用法：<code>src/fx/weather.js</code></p>
+
+    <div class="callout good">
+      <strong>关键性质：</strong>fork <em>派生</em>新 RNG，读取当前 <code>_s</code> 做异或，
+      <strong>不调用</strong>父流的 <code>next()</code>。因此「多写一行 fork」本身不会让 harbor 已有抽取错位。
+    </div>
+
+    <div class="viz" style="margin-top:16px;">
+      <p class="viz-title">Fix 之后 · 两条流互不干扰</p>
+      <div class="stream">
+        <span class="tok splash">S1</span><span class="tok splash">S2</span><span class="tok splash">S3</span>
+        <span class="tok splash">S4</span><span class="tok splash">S5</span><span class="tok splash">S6</span>
+        <span class="arrow">主天气流</span>
+      </div>
+      <div class="stream">
+        <span class="tok ok">L.bearing</span><span class="tok ok">L.elev</span><span class="tok ok">L.dist</span>
+        <span class="arrow">lrng · 始终同一序列</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="append">
+  <div class="hd">
+    <h2>8. 修改落在末尾：不重排、不多插中间步骤</h2>
+    <p>即便有了 fork，雨块仍是一条共享顺序流——插入或重排照样毒死整关。</p>
+  </div>
+  <div class="bd">
+    <h3>Harbor 雨构建管线（冻结）</h3>
+    <div class="pipe" aria-label="build order">
+      <div class="step frozen"><span class="n">1</span>roofMask</div>
+      <div class="step frozen"><span class="n">2</span>rain</div>
+      <div class="step frozen"><span class="n">3</span>splash</div>
+      <div class="step frozen"><span class="n">4</span>drips</div>
+      <div class="step frozen"><span class="n">5</span>mist</div>
+      <div class="step frozen"><span class="n">6</span>ripples</div>
+      <div class="step frozen"><span class="n">7</span>channel</div>
+      <div class="step appended"><span class="n">+尾</span>snow / snowAir</div>
+    </div>
+    <p class="pipe-note">
+      虚线框 = 原 harbor 序列，注释要求 <strong>same calls, same order, same yield points</strong>。
+      绿色强调 = 雪作为新能力<strong>追加在末尾</strong>，并且走 <code>srng</code>，不从雨流里借次数。
+    </p>
+
+    <div class="grid2" style="margin-top:16px;">
+      <div class="card bad">
+        <h4>禁止</h4>
+        <ul>
+          <li>在 splash 与 drips 之间插入新系统</li>
+          <li>调换 mist / ripples 顺序</li>
+          <li>让新功能从 <code>this.rng</code> 多抽，却放在闪电读数之前</li>
+        </ul>
+        <p class="muted" style="margin-top:8px;margin-bottom:0;">结果：整关 drip 边缘、水花位置、旧捕获全部漂移。</p>
+      </div>
+      <div class="card good">
+        <h4>允许</h4>
+        <ul>
+          <li>新子系统 <code>fork(专用盐)</code></li>
+          <li>构建步骤追加在序列尾部</li>
+          <li>空间哈希 / Noise(坐标) 代替顺序骰子</li>
+        </ul>
+        <p class="muted" style="margin-top:8px;margin-bottom:0;">结果：旧 A/B 与 canary 仍有意义；Critic 评的是你改的东西。</p>
+      </div>
+    </div>
+
+    <pre>// 雨块：harbor 原序，不可重排
+this._buildRoofMask(ctx, wp);
+if (wp.rain > 0.001) {
+  this._buildRain();
+  this._buildSplash();
+  this._buildDrips(ctx);
+  this._buildMist();
+  this._buildRipples(ctx);
+}
+if (wp.lightning > 0) this._buildChannel();
+
+// 雪：追加在末尾 + 使用 srng
+if ((wp.snow || 0) > 0.001) {
+  this._buildSnow();
+  this._buildSnowAir();
+}</pre>
+    <p class="src"><code>src/fx/weather.js</code> · build 相位（注释强调 reordering would move every drip edge）</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="agent">
+  <div class="hd">
+    <h2>9. 映射回 Build / Critic / Fix Agent</h2>
+    <p>随机数不是“搜最优”，而是契约；本案例是契约被破坏后又被修回去。</p>
+  </div>
+  <div class="bd">
+    <table class="compare">
+      <thead>
+        <tr>
+          <th>角色</th>
+          <th>在本例中的动作</th>
+          <th>RNG 纪律</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Build</strong></td>
+          <td>实现雨 + 闪电捕获场景</td>
+          <td>应用 seed；当时误用单流</td>
+        </tr>
+        <tr>
+          <td><strong>Critic / Verify</strong></td>
+          <td>重拍 lightning、看指标、发现“退步”</td>
+          <td>暴露：A/B 比较了两场不同的雷</td>
+        </tr>
+        <tr>
+          <td><strong>Fix</strong></td>
+          <td>fork lrng / srng；冻结雨序；雪追加在尾</td>
+          <td>结构修复，不调 seed 碰运气</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>给下一轮 Fix agent 的可执行规则（本例提炼）</h3>
+    <ol>
+      <li>先读 <a href="#artdir">Art Direction</a> 与 <a href="#contract">Published Contracts</a>，再改密度 / 数量。</li>
+      <li>改密度前：问「多出来的 <code>next()</code> 落在哪条流？会不会动到 <code>flashDir</code>？」</li>
+      <li>新系统：先 <code>fork(唯一盐)</code>，再写生成逻辑；构建步骤只允许<strong>末尾追加</strong>。</li>
+      <li>Verify 对齐 Critic 纪律：自有 <code>--tag</code> 重拍；改无关旋钮后确认 lightning 方位未漂。</li>
+      <li>Finding 写法对齐 schema：一 owning file + 可测量 issue + 具体 fix（见 <a href="#critic-brief">§3</a>）。</li>
+    </ol>
+
+    <div class="callout">
+      关卡 PCG（树、破布、道具散落）用同一套思想：
+      模块 <code>seed ^ 盐</code>、空间 <code>hash(ix,iz)</code>、<code>fork</code> 子系统——
+      Critic 才能把「多一片板根 / 多一块布」与「整关被洗牌」区分开。
+    </div>
+  </div>
+</section>
+
+<p class="foot">
+  案例目录 <code>survey/critic/harbor_splash_lightning_fork/</code>
+  · 合同摘录自 <code>weather.js</code> / <code>ART_DIRECTION_HARBOR.md</code> / <code>ARCHITECTURE.md</code>
+  · Critic 原文摘自 <code>docs/round4-workflow.js</code> 与 <code>docs/technical-writeup.md</code>
+</p>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Tiny deterministic LCG for the demo only (visual teaching aid).
+  function DemoRNG(seed) {
+    this.s = seed >>> 0;
+  }
+  DemoRNG.prototype.next = function () {
+    this.s = (Math.imul(this.s, 1664525) + 1013904223) >>> 0;
+    return this.s / 4294967296;
+  };
+  DemoRNG.prototype.tok = function (label, cls) {
+    var v = this.next();
+    var deg = Math.floor(v * 360);
+    return { label: label + '·' + deg + '°', cls: cls, v: v };
+  };
+
+  var root = document.getElementById('streamViz');
+  var label = document.getElementById('vizLabel');
+  var btnBase = document.getElementById('btnBase');
+  var btnMore = document.getElementById('btnMore');
+
+  function render(mode) {
+    var nSplash = mode === 'more' ? 6 : 3;
+    var rng = new DemoRNG(0x5741);
+    var nodes = [];
+    var i;
+    for (i = 0; i < nSplash; i++) {
+      rng.next();
+      nodes.push({ text: 'S' + (i + 1), cls: 'tok splash' });
+    }
+    // Lightning consumes 3 draws — values depend on how many splash drew first.
+    var b = rng.next(), e = rng.next(), d = rng.next();
+    var boltCls = mode === 'more' ? 'tok shift' : 'tok bolt';
+    nodes.push({ text: 'bearing ' + Math.floor(b * 360) + '°', cls: boltCls });
+    nodes.push({ text: 'elev ' + (10 + Math.floor(e * 50)) + '°', cls: boltCls });
+    nodes.push({ text: 'dist ' + (200 + Math.floor(d * 800)) + 'm', cls: boltCls });
+
+    root.innerHTML = '';
+    nodes.forEach(function (n, idx) {
+      if (idx) {
+        var a = document.createElement('span');
+        a.className = 'arrow';
+        a.textContent = '→';
+        root.appendChild(a);
+      }
+      var el = document.createElement('span');
+      el.className = n.cls;
+      el.textContent = n.text;
+      root.appendChild(el);
+    });
+
+    label.textContent = mode === 'more'
+      ? '污染后 · splash×6 挤走闪电读数（橙色 = 已错位）'
+      : '基准流 · splash×3 之后读闪电参数（应保持稳定）';
+
+    btnBase.classList.toggle('active', mode === 'base');
+    btnMore.classList.toggle('active', mode === 'more');
+  }
+
+  btnBase.addEventListener('click', function () { render('base'); });
+  btnMore.addEventListener('click', function () { render('more'); });
+  render('base');
+})();
+</script>
+</body>
+</html>

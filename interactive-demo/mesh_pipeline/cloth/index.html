@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>布料几何生成管线 · Wireframe + 风动演示</title>
+<style>
+  :root {
+    --bg: #0e1114;
+    --panel: #161b20;
+    --line: #2a323a;
+    --text: #d6dde4;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --grid: #7ec8e3;
+    --pin: #e8c27a;
+    --sag: #9ad7a0;
+    --flex: #d4a5e8;
+    --tri: #7ec8e3;
+    --wind: #e8b4a0;
+    --free: #f0a070;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(300px, 400px) 1fr;
+    height: 100%;
+  }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh; }
+  }
+  .side {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow: auto;
+    padding: 22px 20px 40px;
+  }
+  h1 {
+    font-size: 1.15rem; font-weight: 600; margin: 0 0 6px;
+    letter-spacing: 0.02em;
+  }
+  .sub {
+    color: var(--muted); font-size: 12px; margin: 0 0 18px;
+  }
+  .sub code {
+    font-size: 11px; color: var(--accent);
+    background: #0e1114; padding: 1px 5px; border-radius: 3px;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+  }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 7px 12px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: #2a3428; border-color: #4a6348; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .wind-panel {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    margin-bottom: 16px; padding: 10px 12px;
+    background: #0e1114; border: 1px solid var(--line); border-radius: 6px;
+    font-size: 12.5px; color: var(--muted);
+  }
+  .wind-panel label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 160px; }
+  .wind-panel input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .wind-panel .val { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 3.2em; }
+  .step-list { list-style: none; margin: 0; padding: 0; }
+  .step-list li {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .step-list li:hover { border-color: #3d4a55; }
+  .step-list li.active {
+    border-color: var(--accent);
+    background: #1c2228;
+  }
+  .step-list .n {
+    display: inline-block; width: 1.6em; color: var(--accent); font-weight: 600;
+  }
+  .step-list .title { font-weight: 600; }
+  .step-list .blurb {
+    display: none; margin-top: 8px; color: var(--muted); font-size: 12.5px;
+  }
+  .step-list li.active .blurb { display: block; }
+  .formula {
+    margin-top: 8px; padding: 8px 10px;
+    background: #0e1114; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px; color: #b8c4ce; white-space: pre-wrap;
+  }
+  .legend {
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px;
+  }
+  .viewport {
+    position: relative; background: #0a0c0e; min-height: 320px;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud {
+    position: absolute; left: 16px; top: 14px; right: 16px;
+    pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 12px;
+  }
+  .badge {
+    background: rgba(14,17,20,0.82); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 14px; max-width: 440px;
+  }
+  .badge h2 { margin: 0 0 4px; font-size: 14px; color: #fff; font-weight: 600; }
+  .badge p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .hint {
+    font-size: 11px; color: var(--muted);
+    background: rgba(14,17,20,0.7); padding: 6px 10px; border-radius: 4px;
+  }
+  .err {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; padding: 24px; text-align: center; color: #e8a0a0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>布料几何 · 分步 Wireframe + 风动</h1>
+    <p class="sub">
+      复现 <code>props_snowbound.js</code> 中
+      <code>K.sheet → aFlex → clothParts → mergeFlex → applyWind</code>
+      （栅栏迎风面破布）。拖拽旋转，滚轮缩放。
+    </p>
+    <div class="controls">
+      <button type="button" id="btnPrev">上一步</button>
+      <button type="button" id="btnNext" class="primary">下一步</button>
+      <button type="button" id="btnPlay">自动播放</button>
+      <button type="button" id="btnReset">重置视角</button>
+    </div>
+    <div class="wind-panel">
+      <label>
+        风速
+        <input type="range" id="windSpeed" min="0" max="24" step="0.5" value="13" />
+        <span class="val" id="windVal">13 m/s</span>
+      </label>
+      <label style="flex:0; gap:6px;">
+        <input type="checkbox" id="windOn" checked />
+        风动
+      </label>
+    </div>
+    <ol class="step-list" id="steps"></ol>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--grid)"></span>UV 网格边</div>
+      <div><span class="swatch" style="background:var(--pin)"></span>钉住 (pin≈1)</div>
+      <div><span class="swatch" style="background:var(--free)"></span>自由 (pin≈0)</div>
+      <div><span class="swatch" style="background:var(--sag)"></span>静态下垂</div>
+      <div><span class="swatch" style="background:var(--flex)"></span>aFlex 热力</div>
+      <div><span class="swatch" style="background:var(--wind)"></span>风向 / 位移</div>
+    </div>
+  </aside>
+  <main class="viewport" id="viewport">
+    <div class="hud">
+      <div class="badge">
+        <h2 id="hudTitle">—</h2>
+        <p id="hudDesc">—</p>
+      </div>
+      <div class="hint">拖拽旋转 · 滚轮缩放 · ← → 切换步骤</div>
+    </div>
+  </main>
+</div>
+
+<script src="../../vendor/three.global.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  if (!window.THREE) {
+    document.getElementById('viewport').innerHTML =
+      '<div class="err">无法加载 <code>../../vendor/three.global.js</code>。<br/>' +
+      '请用本地 HTTP 打开本页，例如从仓库根目录：<br/>' +
+      '<code>python -m http.server 18765</code><br/>' +
+      '然后访问 <code>survey/mesh_pipeline/cloth/</code></div>';
+    return;
+  }
+
+  var THREE = window.THREE;
+
+  // --------------------------------------------------------------------------
+  // Cloth params (faithful to snowbound fence rag)
+  // --------------------------------------------------------------------------
+  var C = {
+    w: 0.55,
+    d: 0.70,
+    sag: 0.10,
+    nu: 6,
+    nv: 6
+  };
+
+  // Fence rag pin: top edge (v≈0) nailed, free hem toward v=1
+  function pinFn(u, v) {
+    return sat(1.35 - v * 1.8);
+  }
+
+  function sat(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function hash2(x, y) {
+    var n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function fbm2(x, y) {
+    var a = 0, f = 1, g = 0.5, i;
+    for (i = 0; i < 2; i++) {
+      a += g * (hash2(x * f, y * f) * 2 - 1);
+      f *= 2; g *= 0.5;
+    }
+    return a;
+  }
+
+  // Build grid data once (rest pose without sag, with sag, flex, indices)
+  function buildSheetData() {
+    var nu = C.nu, nv = C.nv, w = C.w, d = C.d, sag = C.sag;
+    var verts = []; // {u,v,hold,slack,x,yFlat,ySag,z,flex}
+    var i, j;
+    for (j = 0; j <= nv; j++) {
+      for (i = 0; i <= nu; i++) {
+        var u = i / nu, v = j / nv;
+        var hold = pinFn(u, v);
+        var slack = 1 - hold;
+        var n = fbm2(u * 3.1 + 5, v * 3.1 - 2);
+        var ySag = -sag * slack * (0.75 + n * 0.5) - sag * 0.10 * Math.sin(u * 5.3) * slack;
+        verts.push({
+          u: u, v: v, hold: hold, slack: slack,
+          x: (u - 0.5) * w,
+          yFlat: 0,
+          ySag: ySag,
+          z: (v - 0.5) * d,
+          flex: slack * slack
+        });
+      }
+    }
+    var idx = [];
+    for (j = 0; j < nv; j++) {
+      for (i = 0; i < nu; i++) {
+        var a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, e = c + 1;
+        idx.push(a, c, b, b, c, e);
+      }
+    }
+    return { verts: verts, idx: idx, nu: nu, nv: nv };
+  }
+
+  var sheet = buildSheetData();
+
+  // Second sheet for mergeFlex demo (offset in world)
+  function cloneSheetWorld(ox, oy, oz, yaw) {
+    var cy = Math.cos(yaw), sy = Math.sin(yaw);
+    var verts = sheet.verts.map(function (p) {
+      var x = p.x * cy + p.z * sy + ox;
+      var z = -p.x * sy + p.z * cy + oz;
+      return {
+        u: p.u, v: p.v, hold: p.hold, slack: p.slack, flex: p.flex,
+        x: x, yFlat: oy, ySag: oy + p.ySag, z: z
+      };
+    });
+    return { verts: verts, idx: sheet.idx.slice(), nu: sheet.nu, nv: sheet.nv };
+  }
+  var sheetB = cloneSheetWorld(0.95, 0.08, -0.15, 0.55);
+
+  // --------------------------------------------------------------------------
+  // Geometry helpers
+  // --------------------------------------------------------------------------
+  function lineGeo(points, closed) {
+    var arr = [];
+    var i, n = points.length;
+    for (i = 0; i < n - 1; i++) {
+      arr.push(points[i][0], points[i][1], points[i][2],
+        points[i + 1][0], points[i + 1][1], points[i + 1][2]);
+    }
+    if (closed && n > 2) {
+      arr.push(points[n - 1][0], points[n - 1][1], points[n - 1][2],
+        points[0][0], points[0][1], points[0][2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  function lines(geo, color, opacity) {
+    return new THREE.LineSegments(
+      geo,
+      new THREE.LineBasicMaterial({
+        color: color, transparent: true,
+        opacity: opacity === undefined ? 1 : opacity
+      })
+    );
+  }
+
+  function gridLines(data, yMode, color, opacity) {
+    // yMode: 'flat' | 'sag'
+    var verts = data.verts, nu = data.nu, nv = data.nv;
+    var pts = [];
+    function Y(p) { return yMode === 'sag' ? p.ySag : p.yFlat; }
+    var i, j;
+    for (j = 0; j <= nv; j++) {
+      for (i = 0; i < nu; i++) {
+        var a = verts[j * (nu + 1) + i], b = verts[j * (nu + 1) + i + 1];
+        pts.push([a.x, Y(a), a.z], [b.x, Y(b), b.z]);
+      }
+    }
+    for (i = 0; i <= nu; i++) {
+      for (j = 0; j < nv; j++) {
+        var c = verts[j * (nu + 1) + i], d = verts[(j + 1) * (nu + 1) + i];
+        pts.push([c.x, Y(c), c.z], [d.x, Y(d), d.z]);
+      }
+    }
+    var arr = [];
+    for (i = 0; i < pts.length; i++) arr.push(pts[i][0], pts[i][1], pts[i][2]);
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return lines(g, color, opacity);
+  }
+
+  function triWire(data, yMode, color, opacity) {
+    var verts = data.verts, idx = data.idx;
+    var arr = [];
+    var k;
+    function Y(p) { return yMode === 'sag' ? p.ySag : p.yFlat; }
+    for (k = 0; k < idx.length; k += 3) {
+      var a = verts[idx[k]], b = verts[idx[k + 1]], c = verts[idx[k + 2]];
+      arr.push(a.x, Y(a), a.z, b.x, Y(b), b.z);
+      arr.push(b.x, Y(b), b.z, c.x, Y(c), c.z);
+      arr.push(c.x, Y(c), c.z, a.x, Y(a), a.z);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return lines(g, color, opacity);
+  }
+
+  function dots(data, yMode, colorFn, size) {
+    var group = new THREE.Group();
+    var i, verts = data.verts;
+    for (i = 0; i < verts.length; i++) {
+      var p = verts[i];
+      var sg = new THREE.SphereGeometry(size || 0.018, 8, 6);
+      var col = colorFn ? colorFn(p) : 0x7ec8e3;
+      var sm = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: col }));
+      sm.position.set(p.x, yMode === 'sag' ? p.ySag : p.yFlat, p.z);
+      group.add(sm);
+    }
+    return group;
+  }
+
+  function pinColor(p) {
+    // yellow pinned → orange free
+    var t = 1 - p.hold;
+    var r = Math.round(lerp(0xe8, 0xf0, t));
+    var g = Math.round(lerp(0xc2, 0xa0, t));
+    var b = Math.round(lerp(0x7a, 0x70, t));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  function flexColor(p) {
+    // purple heat by aFlex
+    var t = sat(p.flex);
+    var r = Math.round(lerp(0x3a, 0xd4, t));
+    var g = Math.round(lerp(0x50, 0xa5, t));
+    var b = Math.round(lerp(0x68, 0xe8, t));
+    return (r << 16) | (g << 8) | b;
+  }
+
+  // Indexed mesh with aFlex for wind shader
+  function makeClothGeo(data, yMode) {
+    var verts = data.verts, idx = data.idx;
+    var pos = new Float32Array(verts.length * 3);
+    var flx = new Float32Array(verts.length);
+    var col = new Float32Array(verts.length * 3);
+    var i;
+    for (i = 0; i < verts.length; i++) {
+      var p = verts[i];
+      pos[i * 3] = p.x;
+      pos[i * 3 + 1] = yMode === 'sag' ? p.ySag : p.yFlat;
+      pos[i * 3 + 2] = p.z;
+      flx[i] = p.flex;
+      var t = sat(p.flex);
+      col[i * 3] = lerp(0.35, 0.95, t);
+      col[i * 3 + 1] = lerp(0.45, 0.72, t);
+      col[i * 3 + 2] = lerp(0.55, 0.92, t);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aFlex', new THREE.BufferAttribute(flx, 1));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx.slice());
+    g.computeVertexNormals();
+    return g;
+  }
+
+  // mergeFlex of two sheets (demo)
+  function mergeTwo(dataA, dataB) {
+    var va = dataA.verts, vb = dataB.verts;
+    var total = va.length + vb.length;
+    var pos = new Float32Array(total * 3);
+    var flx = new Float32Array(total);
+    var col = new Float32Array(total * 3);
+    var idx = [];
+    function pack(src, off) {
+      var i;
+      for (i = 0; i < src.length; i++) {
+        var p = src[i];
+        pos[(off + i) * 3] = p.x;
+        pos[(off + i) * 3 + 1] = p.ySag;
+        pos[(off + i) * 3 + 2] = p.z;
+        flx[off + i] = p.flex;
+        var t = sat(p.flex);
+        col[(off + i) * 3] = lerp(0.35, 0.95, t);
+        col[(off + i) * 3 + 1] = lerp(0.45, 0.72, t);
+        col[(off + i) * 3 + 2] = lerp(0.55, 0.92, t);
+      }
+    }
+    pack(va, 0);
+    pack(vb, va.length);
+    var k;
+    for (k = 0; k < dataA.idx.length; k++) idx.push(dataA.idx[k]);
+    for (k = 0; k < dataB.idx.length; k++) idx.push(dataB.idx[k] + va.length);
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aFlex', new THREE.BufferAttribute(flx, 1));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
+  // Wind uniforms (match props_snowbound)
+  var uTime = { value: 0 };
+  var uWind = { value: new THREE.Vector4(0.075, 3.1, 0.42, 0.62) };
+  var uWindDir = { value: new THREE.Vector2(0.72, 0.69) };
+  var windEnabled = { value: 1 };
+
+  function syncWindFromUI() {
+    var speed = parseFloat(document.getElementById('windSpeed').value) || 0;
+    var s = Math.max(0.25, Math.min(2.4, speed / 13));
+    var wv = uWind.value;
+    wv.x = 0.035 + 0.075 * s;
+    wv.y = 2.0 + 1.9 * s;
+    wv.z = 0.32 + 0.30 * s;
+    document.getElementById('windVal').textContent = speed.toFixed(1) + ' m/s';
+    windEnabled.value = document.getElementById('windOn').checked ? 1 : 0;
+  }
+
+  // Faithful WIND_BODY as ShaderMaterial (wireframe-friendly)
+  function windMaterial(opts) {
+    opts = opts || {};
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        sbTime: uTime,
+        sbWind: uWind,
+        sbWindDir: uWindDir,
+        windOn: windEnabled,
+        opacity: { value: opts.opacity === undefined ? 0.92 : opts.opacity },
+        useVertexColor: { value: opts.vertexColors ? 1 : 0 },
+        baseColor: { value: new THREE.Color(opts.color || 0x7ec8e3) }
+      },
+      vertexShader: [
+        'uniform float sbTime;',
+        'uniform vec4 sbWind;',
+        'uniform vec2 sbWindDir;',
+        'uniform float windOn;',
+        'attribute float aFlex;',
+        'attribute vec3 color;',
+        'varying vec3 vColor;',
+        'void main() {',
+        '  vColor = color;',
+        '  vec3 transformed = position;',
+        '  vec3 sbOrg = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;',
+        '  vec3 sbP = sbOrg + transformed;',
+        '  float sbG = 0.52 + 0.48 * sin(sbTime * 0.61 + sbP.x * 0.071 + sbP.z * 0.053);',
+        '  sbG *= 0.74 + 0.26 * sin(sbTime * 0.203 + sbP.z * 0.031 - sbP.x * 0.024);',
+        '  float sbPh = sbTime * sbWind.y + (sbP.x * 0.29 + sbP.z * 0.21) * sbWind.w;',
+        '  float sbS1 = sin(sbPh);',
+        '  float sbS2 = sin(sbPh * 2.27 + 1.7);',
+        '  float sbS3 = sin(sbPh * 4.63 + sbP.y * 5.1 + sbP.x * 1.9);',
+        '  float sbA = sbWind.x * aFlex * sbG * windOn;',
+        '  transformed.x += sbA * (sbWindDir.x * 0.92 + sbS1 * 0.55 + sbS2 * 0.15);',
+        '  transformed.z += sbA * (sbWindDir.y * 0.92 + sbS2 * 0.38 - sbS1 * 0.12);',
+        '  transformed.y += sbA * sbWind.z * (sbS3 * 0.46 - 0.22);',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(transformed, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader: [
+        'uniform vec3 baseColor;',
+        'uniform float opacity;',
+        'uniform float useVertexColor;',
+        'varying vec3 vColor;',
+        'void main() {',
+        '  vec3 c = mix(baseColor, vColor, useVertexColor);',
+        '  gl_FragColor = vec4(c, opacity);',
+        '}'
+      ].join('\n'),
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      wireframe: !!opts.wireframe,
+      vertexColors: !!opts.vertexColors
+    });
+  }
+
+  function windMesh(geo, opts) {
+    return new THREE.Mesh(geo, windMaterial(opts));
+  }
+
+  function makeArrow(origin, dir, len, color) {
+    var d = dir.clone().normalize().multiplyScalar(len);
+    return lines(lineGeo([
+      [origin.x, origin.y, origin.z],
+      [origin.x + d.x, origin.y + d.y, origin.z + d.z]
+    ]), color, 0.95);
+  }
+
+  // --------------------------------------------------------------------------
+  // Steps
+  // --------------------------------------------------------------------------
+  var STEPS = [
+    {
+      id: 'grid',
+      title: '① UV 网格',
+      hud: '还没有下垂——只是参数平面上的格点',
+      blurb: '布料原子是一张参数网格：u∈[0,1]、v∈[0,1]，离散成 (nu+1)×(nv+1) 个顶点。世界坐标先铺成水平矩形，宽度 w、深度 d。',
+      formula: 'x = (u − 0.5) · w\nz = (v − 0.5) · d\ny = 0\nnu=6, nv=6 → 7×7 顶点'
+    },
+    {
+      id: 'pin',
+      title: '② pin(u,v) 钉住',
+      hud: '谁被钉死、谁能飞——风动的空间掩码',
+      blurb: '栅栏破布：迎风上缘钉在桩上，下摆自由。pin=1 钉死，pin=0 全自由。顶点颜色：黄=钉住，橙=自由。',
+      formula: 'pin(u,v) = saturate(1.35 − v·1.8)\nslack = 1 − pin\n(顶部 v≈0 → pin≈1；下摆 v→1 → pin≈0)'
+    },
+    {
+      id: 'sag',
+      title: '③ 静态下垂 sag',
+      hud: '建造时就把“耷拉”写进 rest pose',
+      blurb: '只有 slack 区域下垂。噪声 + 正弦打破平板感。这是作者态形变，不是动画——动画在顶点着色器里叠在 transformed 上。',
+      formula: 'y = −sag·slack·(0.75 + n·0.5)\n    − sag·0.10·sin(u·5.3)·slack\nn = fbm2(u,v)'
+    },
+    {
+      id: 'flex',
+      title: '④ aFlex = slack²',
+      hud: '每个顶点一条 float：风能动多少',
+      blurb: 'flex 不是几何，是顶点属性。平方让过渡更陡：半钉区域几乎不动，自由角满幅。mergeAll 会丢掉它，所以布料走 mergeFlex。',
+      formula: 'aFlex = slack · slack\nsetAttribute(\'aFlex\', …)\n紫热力 = aFlex 大小'
+    },
+    {
+      id: 'tris',
+      title: '⑤ 三角化',
+      hud: '相邻格子 → 两个三角形 = 可渲染曲面',
+      blurb: '标准网格拓扑。之后 toNonIndexed() 方便顶点色/法线独立；演示页保留 indexed 便于看清结构。',
+      formula: 'for each cell (i,j):\n  a,b,c,e = 四角\n  tri(a,c,b) + tri(b,c,e)'
+    },
+    {
+      id: 'part',
+      title: '⑥ clothParts 登记',
+      hud: '不进静态材质桶——带矩阵放进专用列表',
+      blurb: '普通木石进 S.canvas 再 mergeAll；布料走 _clothPart，因为 Geo.mergeAll 只保留 position/normal/uv。kind 分 canvas / light 两套材质。',
+      formula: 'clothParts.push({\n  geo, m: Tn(x,y,z,0,yaw,0),\n  kind: \'canvas\'\n})'
+    },
+    {
+      id: 'merge',
+      title: '⑦ mergeFlex',
+      hud: '多片破布合成一网格，并保留 aFlex',
+      blurb: '按 kind 分桶后 mergeFlex：变换顶点、拷贝 aFlex。两片示例合并成一次 draw。对比：普通 mergeAll 会让风动静音。',
+      formula: 'for each part:\n  p\' = M · p\n  flx\'[i] = aFlex[i]\nout.setAttribute(\'aFlex\', flx\')'
+    },
+    {
+      id: 'shader',
+      title: '⑧ applyWind 注入',
+      hud: '顶点着色器：顺风推住 + 多层正弦抖动',
+      blurb: 'chainCompile 接到 materials.js 的 onBeforeCompile 之后，不破坏 wear/triplanar。风向来自 weather.windDir；振幅与频率随 windSpeed 同升。',
+      formula: 'sbA = amp · aFlex · gust\nΔx += sbA·(dir.x·0.92 + osc…)\nΔz += sbA·(dir.y·0.92 + …)\nΔy += sbA·billow·(…)\n→ 被推住，不是对称摆动'
+    },
+    {
+      id: 'live',
+      title: '⑨ 实时风动',
+      hud: '完整破布：下垂 rest + aFlex 掩码 + WIND_BODY',
+      blurb: '每帧只更新 sbTime / sbWind；几何不重建。调左侧风速与“风动”开关。钉住上缘几乎不动，自由角顺风扬起。',
+      formula: 'update():\n  s = clamp(windSpeed/13)\n  amp = 0.035 + 0.075·s\n  freq = 2.0 + 1.9·s'
+    }
+  ];
+
+  // --------------------------------------------------------------------------
+  // Scene
+  // --------------------------------------------------------------------------
+  var viewport = document.getElementById('viewport');
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x0a0c0e, 1);
+  viewport.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(42, 1, 0.05, 100);
+  camera.position.set(1.6, 1.1, 2.2);
+
+  var root = new THREE.Group();
+  root.position.set(0, 0.15, 0);
+  scene.add(root);
+
+  var stepRoot = new THREE.Group();
+  root.add(stepRoot);
+
+  var grid = new THREE.GridHelper(4, 16, 0x243038, 0x1a2228);
+  grid.position.y = -0.35;
+  root.add(grid);
+
+  // Fence post hint (static visual)
+  function addFenceHint() {
+    var post = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 1.1, 0.06),
+      new THREE.MeshBasicMaterial({ color: 0x3a454e, transparent: true, opacity: 0.55 })
+    );
+    post.position.set(0, 0.2, -C.d * 0.5 - 0.04);
+    stepRoot.add(post);
+    // nail line along pinned edge
+    var nails = [];
+    var i, nu = C.nu;
+    for (i = 0; i <= nu; i++) {
+      var u = i / nu;
+      nails.push([(u - 0.5) * C.w, 0.02, -C.d * 0.5]);
+    }
+    stepRoot.add(lines(lineGeo(nails), 0xe8c27a, 0.7));
+  }
+
+  var orbit = {
+    target: new THREE.Vector3(0.25, 0.05, 0),
+    spherical: new THREE.Spherical(2.8, 1.05, 0.65),
+    dragging: false, px: 0, py: 0
+  };
+  function syncCam() {
+    camera.position.setFromSpherical(orbit.spherical);
+    camera.position.add(orbit.target);
+    camera.lookAt(orbit.target);
+  }
+  syncCam();
+
+  viewport.addEventListener('pointerdown', function (e) {
+    orbit.dragging = true; orbit.px = e.clientX; orbit.py = e.clientY;
+    viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointerup', function () { orbit.dragging = false; });
+  viewport.addEventListener('pointermove', function (e) {
+    if (!orbit.dragging) return;
+    var dx = e.clientX - orbit.px, dy = e.clientY - orbit.py;
+    orbit.px = e.clientX; orbit.py = e.clientY;
+    orbit.spherical.theta -= dx * 0.005;
+    orbit.spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, orbit.spherical.phi + dy * 0.005));
+    syncCam();
+  });
+  viewport.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    orbit.spherical.radius = Math.max(1.2, Math.min(8, orbit.spherical.radius * (1 + e.deltaY * 0.001)));
+    syncCam();
+  }, { passive: false });
+
+  function clearStep() {
+    while (stepRoot.children.length) {
+      var c = stepRoot.children[0];
+      stepRoot.remove(c);
+      c.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); });
+          else o.material.dispose();
+        }
+      });
+    }
+  }
+
+  var animMeshes = [];
+
+  function showStep(idx) {
+    clearStep();
+    animMeshes = [];
+    var step = STEPS[idx];
+    var windArrow;
+
+    switch (step.id) {
+      case 'grid':
+        stepRoot.add(gridLines(sheet, 'flat', 0x7ec8e3, 0.85));
+        stepRoot.add(dots(sheet, 'flat', function () { return 0x9ad7a0; }, 0.016));
+        break;
+
+      case 'pin':
+        addFenceHint();
+        stepRoot.add(gridLines(sheet, 'flat', 0x3a5058, 0.35));
+        stepRoot.add(dots(sheet, 'flat', pinColor, 0.022));
+        break;
+
+      case 'sag':
+        addFenceHint();
+        stepRoot.add(gridLines(sheet, 'flat', 0x2a3840, 0.25));
+        stepRoot.add(gridLines(sheet, 'sag', 0x9ad7a0, 0.9));
+        stepRoot.add(dots(sheet, 'sag', pinColor, 0.018));
+        break;
+
+      case 'flex':
+        addFenceHint();
+        stepRoot.add(gridLines(sheet, 'sag', 0x3a4550, 0.3));
+        stepRoot.add(dots(sheet, 'sag', flexColor, 0.024));
+        break;
+
+      case 'tris':
+        addFenceHint();
+        stepRoot.add(triWire(sheet, 'sag', 0x7ec8e3, 0.92));
+        break;
+
+      case 'part': {
+        addFenceHint();
+        var g1 = makeClothGeo(sheet, 'sag');
+        var m1 = windMesh(g1, { wireframe: true, color: 0x7ec8e3, opacity: 0.9 });
+        stepRoot.add(m1);
+        animMeshes.push(m1);
+        // show world transform axes at cloth origin
+        stepRoot.add(makeArrow(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, 0), 0.25, 0xe07070));
+        stepRoot.add(makeArrow(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), 0.25, 0x70e070));
+        stepRoot.add(makeArrow(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1), 0.25, 0x7090e0));
+        break;
+      }
+
+      case 'merge': {
+        var gm = mergeTwo(sheet, sheetB);
+        var mm = windMesh(gm, { wireframe: true, vertexColors: true, opacity: 0.95 });
+        stepRoot.add(mm);
+        animMeshes.push(mm);
+        // ghost second origin
+        var mark = new THREE.Mesh(
+          new THREE.SphereGeometry(0.03, 8, 6),
+          new THREE.MeshBasicMaterial({ color: 0xe8b4a0 })
+        );
+        mark.position.set(0.95, 0.08, -0.15);
+        stepRoot.add(mark);
+        break;
+      }
+
+      case 'shader': {
+        addFenceHint();
+        var gs = makeClothGeo(sheet, 'sag');
+        var ms = windMesh(gs, { wireframe: true, vertexColors: true, opacity: 0.95 });
+        stepRoot.add(ms);
+        animMeshes.push(ms);
+        windArrow = makeArrow(
+          new THREE.Vector3(0, 0.15, 0),
+          new THREE.Vector3(uWindDir.value.x, 0, uWindDir.value.y),
+          0.7, 0xe8b4a0
+        );
+        stepRoot.add(windArrow);
+        // annotate: pinned edge barely moves
+        stepRoot.add(lines(lineGeo([
+          [-C.w * 0.5, 0.05, -C.d * 0.5],
+          [C.w * 0.5, 0.05, -C.d * 0.5]
+        ]), 0xe8c27a, 0.85));
+        break;
+      }
+
+      case 'live': {
+        addFenceHint();
+        var gl = mergeTwo(sheet, sheetB);
+        var ml = windMesh(gl, { wireframe: true, vertexColors: true, opacity: 0.95 });
+        stepRoot.add(ml);
+        animMeshes.push(ml);
+        // soft fill under wire for presence
+        var fill = windMesh(gl.clone(), {
+          wireframe: false, vertexColors: true, opacity: 0.18
+        });
+        stepRoot.add(fill);
+        animMeshes.push(fill);
+        windArrow = makeArrow(
+          new THREE.Vector3(0.2, 0.2, 0),
+          new THREE.Vector3(uWindDir.value.x, 0, uWindDir.value.y),
+          0.85, 0xe8b4a0
+        );
+        stepRoot.add(windArrow);
+        break;
+      }
+    }
+
+    document.getElementById('hudTitle').textContent = step.title;
+    document.getElementById('hudDesc').textContent = step.hud;
+
+    var items = document.querySelectorAll('.step-list li');
+    items.forEach(function (li, i) {
+      li.classList.toggle('active', i === idx);
+    });
+    document.getElementById('btnPrev').disabled = idx <= 0;
+    document.getElementById('btnNext').disabled = idx >= STEPS.length - 1;
+  }
+
+  // UI list
+  var list = document.getElementById('steps');
+  STEPS.forEach(function (s, i) {
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<div><span class="n">' + (i + 1) + '</span><span class="title">' +
+      s.title.replace(/^[①-⑨]\s*/, '') + '</span></div>' +
+      '<div class="blurb">' + s.blurb +
+      '<div class="formula">' + s.formula + '</div></div>';
+    li.addEventListener('click', function () {
+      cur = i; stopPlay(); showStep(cur);
+    });
+    list.appendChild(li);
+  });
+
+  var cur = 0;
+  var playTimer = null;
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    document.getElementById('btnPlay').textContent = '自动播放';
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', function () {
+    stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+  });
+  document.getElementById('btnNext').addEventListener('click', function () {
+    stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    if (playTimer) { stopPlay(); return; }
+    document.getElementById('btnPlay').textContent = '停止';
+    playTimer = setInterval(function () {
+      if (cur >= STEPS.length - 1) { cur = 0; }
+      else cur++;
+      showStep(cur);
+    }, 2600);
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+    orbit.spherical.set(2.8, 1.05, 0.65);
+    orbit.target.set(0.25, 0.05, 0);
+    syncCam();
+  });
+  document.getElementById('windSpeed').addEventListener('input', syncWindFromUI);
+  document.getElementById('windOn').addEventListener('change', syncWindFromUI);
+  syncWindFromUI();
+
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+    } else if (e.key === 'ArrowLeft') {
+      stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+    }
+  });
+
+  function resize() {
+    var w = viewport.clientWidth, h = viewport.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  showStep(0);
+
+  var t0 = performance.now();
+  (function loop(now) {
+    requestAnimationFrame(loop);
+    uTime.value = (now - t0) * 0.001;
+    if (!orbit.dragging && !playTimer) {
+      orbit.spherical.theta += 0.0009;
+      syncCam();
+    }
+    renderer.render(scene, camera);
+  })(performance.now());
+})();
+</script>
+</body>
+</html>

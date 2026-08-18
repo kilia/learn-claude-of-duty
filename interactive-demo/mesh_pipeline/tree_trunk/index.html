@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>树干几何生成管线 · Wireframe 分步演示</title>
+<style>
+  :root {
+    --bg: #0e1114;
+    --panel: #161b20;
+    --line: #2a323a;
+    --text: #d6dde4;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --wire: #7ec8e3;
+    --axis: #e8c27a;
+    --station: #f0a070;
+    --ring: #9ad7a0;
+    --flute: #d4a5e8;
+    --butt: #e8b4a0;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    height: 100%;
+  }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh; }
+  }
+  .side {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow: auto;
+    padding: 22px 20px 40px;
+  }
+  h1 {
+    font-size: 1.15rem; font-weight: 600; margin: 0 0 6px;
+    letter-spacing: 0.02em;
+  }
+  .sub {
+    color: var(--muted); font-size: 12px; margin: 0 0 18px;
+  }
+  .sub code {
+    font-size: 11px; color: var(--accent);
+    background: #0e1114; padding: 1px 5px; border-radius: 3px;
+  }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+  }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 7px 12px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: #2a3428; border-color: #4a6348; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .step-list { list-style: none; margin: 0; padding: 0; }
+  .step-list li {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .step-list li:hover { border-color: #3d4a55; }
+  .step-list li.active {
+    border-color: var(--accent);
+    background: #1c2228;
+  }
+  .step-list .n {
+    display: inline-block; width: 1.6em; color: var(--accent); font-weight: 600;
+  }
+  .step-list .title { font-weight: 600; }
+  .step-list .blurb {
+    display: none; margin-top: 8px; color: var(--muted); font-size: 12.5px;
+  }
+  .step-list li.active .blurb { display: block; }
+  .formula {
+    margin-top: 8px; padding: 8px 10px;
+    background: #0e1114; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px; color: #b8c4ce; white-space: pre-wrap;
+  }
+  .legend {
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px;
+  }
+  .viewport {
+    position: relative; background: #0a0c0e; min-height: 320px;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud {
+    position: absolute; left: 16px; top: 14px; right: 16px;
+    pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 12px;
+  }
+  .badge {
+    background: rgba(14,17,20,0.82); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 14px; max-width: 420px;
+  }
+  .badge h2 { margin: 0 0 4px; font-size: 14px; color: #fff; font-weight: 600; }
+  .badge p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .hint {
+    font-size: 11px; color: var(--muted);
+    background: rgba(14,17,20,0.7); padding: 6px 10px; border-radius: 4px;
+  }
+  .err {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; padding: 24px; text-align: center; color: #e8a0a0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>树干几何 · 分步 Wireframe</h1>
+    <p class="sub">
+      复现 <code>level_jungle.js</code> 中
+      <code>stations → tube → barkTube → buttressFin</code>
+      的构建过程。拖拽旋转，滚轮缩放。
+    </p>
+    <div class="controls">
+      <button type="button" id="btnPrev">上一步</button>
+      <button type="button" id="btnNext" class="primary">下一步</button>
+      <button type="button" id="btnPlay">自动播放</button>
+      <button type="button" id="btnReset">重置视角</button>
+    </div>
+    <ol class="step-list" id="steps"></ol>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--axis)"></span>轴线 / 切向</div>
+      <div><span class="swatch" style="background:var(--station)"></span>站点（含半径）</div>
+      <div><span class="swatch" style="background:var(--ring)"></span>截面环顶点</div>
+      <div><span class="swatch" style="background:var(--wire)"></span>管壁三角边</div>
+      <div><span class="swatch" style="background:var(--flute)"></span>凹槽调制后轮廓</div>
+      <div><span class="swatch" style="background:var(--butt)"></span>板根鳍片</div>
+    </div>
+  </aside>
+  <main class="viewport" id="viewport">
+    <div class="hud">
+      <div class="badge">
+        <h2 id="hudTitle">—</h2>
+        <p id="hudDesc">—</p>
+      </div>
+      <div class="hint">拖拽旋转 · 滚轮缩放 · ← → 切换步骤</div>
+    </div>
+  </main>
+</div>
+
+<script src="../../vendor/three.global.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  if (!window.THREE) {
+    document.getElementById('viewport').innerHTML =
+      '<div class="err">无法加载 <code>../../vendor/three.global.js</code>。<br/>' +
+      '请用本地 HTTP 打开本页，或从仓库根目录起的相对路径访问<br/>' +
+      '<code>survey/mesh_pipeline/tree_trunk/index.html</code></div>';
+    return;
+  }
+
+  var THREE = window.THREE;
+
+  // --------------------------------------------------------------------------
+  // Tree params (scaled down for viewing: game trees are ~15–27 m)
+  // --------------------------------------------------------------------------
+  var T = {
+    h: 8.0,
+    r: 0.55,
+    lean: 0.035,
+    leanY: 0.7,
+    buttress: 5,
+    bh: 1.55,
+    seed: 4242,
+    segs: 8,
+    radial: 10
+  };
+
+  // Deterministic value-noise (tiny, enough for wobble demo)
+  function hash2(x, y) {
+    var n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function fbm2(x, y) {
+    var a = 0, f = 1, g = 0.5, i;
+    for (i = 0; i < 3; i++) {
+      a += g * (hash2(x * f, y * f) * 2 - 1);
+      f *= 2; g *= 0.5;
+    }
+    return a;
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function sat(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+  // ---- Step 1 data: stations ------------------------------------------------
+  function buildStations() {
+    var st = [], lx = Math.sin(T.leanY) * T.lean, lz = Math.cos(T.leanY) * T.lean;
+    var i, n = T.segs;
+    for (i = 0; i <= n; i++) {
+      var t = i / n;
+      var r = T.r * lerp(1.75, 0.26, Math.pow(t, 0.50));
+      var wob = fbm2(T.seed * 0.013 + t * 2.2, T.seed * 0.007) * 0.9;
+      st.push([
+        lx * T.h * t * t + wob * 0.30 * t,
+        T.h * t,
+        lz * T.h * t * t + wob * 0.24 * t,
+        r
+      ]);
+    }
+    return st;
+  }
+
+  // ---- tube (faithful to level_jungle.js) -----------------------------------
+  function tube(stations, seg, mod) {
+    seg = seg || 10;
+    var n = stations.length;
+    var pos = [], i, j;
+    var frames = [];
+    for (i = 0; i < n; i++) {
+      var a = stations[Math.max(0, i - 1)], b = stations[Math.min(n - 1, i + 1)];
+      var tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2];
+      var tl = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1;
+      tx /= tl; ty /= tl; tz /= tl;
+      var ux = 0, uy = 1, uz = 0;
+      if (Math.abs(ty) > 0.94) { ux = 1; uy = 0; uz = 0; }
+      var nx = uy * tz - uz * ty, ny = uz * tx - ux * tz, nz = ux * ty - uy * tx;
+      var nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      nx /= nl; ny /= nl; nz /= nl;
+      var bx = ty * nz - tz * ny, by = tz * nx - tx * nz, bz = tx * ny - ty * nx;
+      frames.push([nx, ny, nz, bx, by, bz, tx, ty, tz]);
+    }
+    function ring(i, j) {
+      var s = stations[i], f = frames[i];
+      var th = j / seg * Math.PI * 2;
+      var c = Math.cos(th), sn = Math.sin(th);
+      var dx = f[0] * c + f[3] * sn, dy = f[1] * c + f[4] * sn, dz = f[2] * c + f[5] * sn;
+      var rr = s[3];
+      if (mod) rr *= mod(i, ((j % seg) + seg) % seg, seg);
+      return [s[0] + dx * rr, s[1] + dy * rr, s[2] + dz * rr];
+    }
+    for (i = 0; i + 1 < n; i++) {
+      for (j = 0; j < seg; j++) {
+        var A = ring(i, j), B = ring(i, j + 1), C = ring(i + 1, j + 1), D = ring(i + 1, j);
+        pos.push(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2]);
+        pos.push(A[0], A[1], A[2], C[0], C[1], C[2], D[0], D[1], D[2]);
+      }
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    return { geo: g, frames: frames, ring: ring, seg: seg };
+  }
+
+  function fluteMod(seed, flute) {
+    var lobes = 3 + ((seed || 0) % 4);
+    var ph = ((seed || 0) % 17) * 0.37;
+    return function (i, j, sg) {
+      var th = (j / sg) * Math.PI * 2;
+      return 1 + flute * (Math.sin(th * lobes + ph + i * 0.31) * 0.62 +
+        Math.sin(th * (lobes * 2 + 1) - ph * 1.7 + i * 0.17) * 0.38);
+    };
+  }
+
+  function buttressFin(r0, reach, hgt, thick) {
+    var n = 7, i;
+    var pos = [];
+    var pts = [];
+    for (i = 0; i <= n; i++) {
+      var t = i / n;
+      var x = r0 * 0.55 + (reach - r0 * 0.55) * t;
+      var y = hgt * Math.pow(1 - t, 1.75);
+      var th = thick * (1 - t * 0.62) * 0.5;
+      pts.push([x, y, th]);
+    }
+    function quad(a, b, c, d) {
+      pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+      pos.push(a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2]);
+    }
+    for (i = 0; i < n; i++) {
+      var A = pts[i], Bp = pts[i + 1];
+      quad([A[0], A[1], A[2]], [A[0], 0, A[2]], [Bp[0], 0, Bp[2]], [Bp[0], Bp[1], Bp[2]]);
+      quad([A[0], A[1], -A[2]], [Bp[0], Bp[1], -Bp[2]], [Bp[0], 0, -Bp[2]], [A[0], 0, -A[2]]);
+      quad([A[0], A[1], A[2]], [Bp[0], Bp[1], Bp[2]], [Bp[0], Bp[1], -Bp[2]], [A[0], A[1], -A[2]]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    return g;
+  }
+
+  // ---- Helpers to build debug visuals --------------------------------------
+  function lineGeo(points, closed) {
+    var arr = [];
+    var i, n = points.length;
+    for (i = 0; i < n - 1; i++) {
+      arr.push(points[i][0], points[i][1], points[i][2],
+        points[i + 1][0], points[i + 1][1], points[i + 1][2]);
+    }
+    if (closed && n > 2) {
+      arr.push(points[n - 1][0], points[n - 1][1], points[n - 1][2],
+        points[0][0], points[0][1], points[0][2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  function wireMesh(geo, color, opacity) {
+    var m = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({
+        color: color, wireframe: true, transparent: true,
+        opacity: opacity === undefined ? 0.95 : opacity,
+        depthWrite: false
+      })
+    );
+    return m;
+  }
+
+  function lines(geo, color, opacity) {
+    return new THREE.LineSegments(
+      geo,
+      new THREE.LineBasicMaterial({
+        color: color, transparent: true,
+        opacity: opacity === undefined ? 1 : opacity
+      })
+    );
+  }
+
+  function makeArrow(origin, dir, len, color) {
+    var d = dir.clone().normalize().multiplyScalar(len);
+    var g = lineGeo([
+      [origin.x, origin.y, origin.z],
+      [origin.x + d.x, origin.y + d.y, origin.z + d.z]
+    ]);
+    return lines(g, color, 0.95);
+  }
+
+  // --------------------------------------------------------------------------
+  // Steps definition
+  // --------------------------------------------------------------------------
+  var stations = buildStations();
+  var plainTube = tube(stations, T.radial, null);
+  var flutedTube = tube(stations, T.radial, fluteMod(T.seed, 0.085));
+
+  var STEPS = [
+    {
+      id: 'axis',
+      title: '① 参数与轴线',
+      hud: '只有高度方向的意图——还没有三角形',
+      blurb: '输入规格：高度 h、基准半径 r、倾斜 lean。轴线用二次倾斜（越往上偏越多）表示树木“不是铅垂水管”。',
+      formula: 'lx,lz = lean · (sin/cos leanY)\ny(t) = h · t\nx(t) = lx · h · t²   （倾斜）'
+    },
+    {
+      id: 'stations',
+      title: '② 站点 stations',
+      hud: '把树干拆成一串带半径的空间点',
+      blurb: '沿高度采 9 个站（segs=8）。每站 [x,y,z,r]：位置 + 该高度的半径。半径从根 1.75r 收到顶 0.26r；fbm 扭摆打破直线。',
+      formula: 'r(t) = r · lerp(1.75, 0.26, t^0.5)\nwob = fbm2(seed, t)\nstation = [x+wob, y, z+wob, r(t)]'
+    },
+    {
+      id: 'discs',
+      title: '③ 半径圆盘',
+      hud: '每个站点画出截面圆——管的“骨架尺寸”',
+      blurb: '半径决定该高度横切圆的大小。根部粗、顶部细，这是尖削（taper），不是贴图能代替的形状。',
+      formula: 'disc_i : 圆心 = station.xyz\n半径 = station.r\n法向 ≈ 局部切向 T'
+    },
+    {
+      id: 'frames',
+      title: '④ 局部标架 N / B / T',
+      hud: '每个站点需要一对正交基才能铺圆周',
+      blurb: '切向 T 来自邻站差分。参考上向量 × T 得 N，再得 B。竖直段时换用世界 X 当参考，避免叉积退化。',
+      formula: 'T = normalize(p_{i+1} − p_{i−1})\nN = normalize(up × T)\nB = T × N'
+    },
+    {
+      id: 'rings',
+      title: '⑤ 截面环顶点',
+      hud: '在每个标架上绕一圈采样顶点',
+      blurb: 'θ = j/seg·2π。顶点 = 圆心 + (N cosθ + B sinθ)·r。此时仍是点列，还没有连成面。',
+      formula: 'd = N·cosθ + B·sinθ\np = centre + d · r'
+    },
+    {
+      id: 'tube',
+      title: '⑥ 扫掠成管 tube()',
+      hud: '相邻两圈四边形 → 两个三角形 = 管壁',
+      blurb: '这是树干的几何原子。变半径、可弯曲。正圆截面在雨林里会像“水管”，下一步用凹槽打破。',
+      formula: 'for each station i, sector j:\n  quad(ring_i[j], ring_i[j+1],\n       ring_{i+1}[j+1], ring_{i+1}[j])\n  → 2 triangles'
+    },
+    {
+      id: 'flute',
+      title: '⑦ 纵向凹槽 flute',
+      hud: '角向调制半径 → 纵棱 / 槽',
+      blurb: 'barkTube 的 mod：半径乘上随 θ 变化的正弦，形成 3–6 道纵棱。轮廓不再是正圆，侧光能咬住肋。',
+      formula: 'rr *= 1 + flute · (\n  0.62·sin(θ·lobes + φ)\n+ 0.38·sin(θ·(2lobes+1) − …))'
+    },
+    {
+      id: 'buttress',
+      title: '⑧ 板根 buttressFin',
+      hud: '根部飞出的鳍片——把圆柱变成“站得住的树”',
+      blurb: '径向内凹曲线挤成薄鳍，绕树干旋转摆放。凹幂 (1−t)^1.75 让上缘贴干、外端落地。',
+      formula: 'x = lerp(r0, reach, t)\ny = hgt · (1−t)^1.75\n挤出两侧立面 + 顶缘'
+    },
+    {
+      id: 'assemble',
+      title: '⑨ 拼成完整树干',
+      hud: '凹槽管 + 多片板根 → 一棵树的树干',
+      blurb: '全部进入 Builder 的 bark 材质桶，关卡 finalize 时与其它树干 mergeAll 成少数 draw。叶冠是另一路 InstancedMesh，不进树干网格。',
+      formula: 'B.add(\'bark\', barkTube(st, …), M)\nfor each buttress:\n  B.add(\'bark\', fin, M·Ry(ang))'
+    }
+  ];
+
+  // --------------------------------------------------------------------------
+  // Scene
+  // --------------------------------------------------------------------------
+  var viewport = document.getElementById('viewport');
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x0a0c0e, 1);
+  viewport.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
+  camera.position.set(6.5, 4.2, 9.5);
+
+  var root = new THREE.Group();
+  // Center trunk roughly in view
+  root.position.set(0, -T.h * 0.42, 0);
+  scene.add(root);
+
+  var stepRoot = new THREE.Group();
+  root.add(stepRoot);
+
+  // Ground grid (subtle)
+  var grid = new THREE.GridHelper(14, 14, 0x243038, 0x1a2228);
+  grid.position.y = 0;
+  root.add(grid);
+
+  // Orbit controls (manual, no examples/jsm)
+  var orbit = {
+    target: new THREE.Vector3(0, T.h * 0.35, 0),
+    spherical: new THREE.Spherical(12.5, 1.15, 0.55),
+    dragging: false, px: 0, py: 0
+  };
+  function syncCam() {
+    camera.position.setFromSpherical(orbit.spherical);
+    camera.position.add(orbit.target);
+    camera.lookAt(orbit.target);
+  }
+  syncCam();
+
+  viewport.addEventListener('pointerdown', function (e) {
+    orbit.dragging = true; orbit.px = e.clientX; orbit.py = e.clientY;
+    viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointerup', function () { orbit.dragging = false; });
+  viewport.addEventListener('pointermove', function (e) {
+    if (!orbit.dragging) return;
+    var dx = e.clientX - orbit.px, dy = e.clientY - orbit.py;
+    orbit.px = e.clientX; orbit.py = e.clientY;
+    orbit.spherical.theta -= dx * 0.005;
+    orbit.spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, orbit.spherical.phi + dy * 0.005));
+    syncCam();
+  });
+  viewport.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    orbit.spherical.radius = Math.max(4, Math.min(28, orbit.spherical.radius * (1 + e.deltaY * 0.001)));
+    syncCam();
+  }, { passive: false });
+
+  function clearStep() {
+    while (stepRoot.children.length) {
+      var c = stepRoot.children[0];
+      stepRoot.remove(c);
+      c.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); });
+          else o.material.dispose();
+        }
+      });
+    }
+  }
+
+  function addAxis() {
+    var pts = stations.map(function (s) { return [s[0], s[1], s[2]]; });
+    stepRoot.add(lines(lineGeo(pts), 0xe8c27a, 0.95));
+  }
+
+  function addStations(asSpheres) {
+    var i;
+    for (i = 0; i < stations.length; i++) {
+      var s = stations[i];
+      if (asSpheres) {
+        var sg = new THREE.SphereGeometry(0.06, 10, 8);
+        var sm = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0xf0a070 }));
+        sm.position.set(s[0], s[1], s[2]);
+        stepRoot.add(sm);
+      }
+    }
+  }
+
+  function addDiscs() {
+    var i, j, seg = 32;
+    for (i = 0; i < stations.length; i++) {
+      var s = stations[i];
+      var f = plainTube.frames[i];
+      var circ = [];
+      for (j = 0; j <= seg; j++) {
+        var th = j / seg * Math.PI * 2;
+        var c = Math.cos(th), sn = Math.sin(th);
+        var dx = f[0] * c + f[3] * sn, dy = f[1] * c + f[4] * sn, dz = f[2] * c + f[5] * sn;
+        circ.push([s[0] + dx * s[3], s[1] + dy * s[3], s[2] + dz * s[3]]);
+      }
+      stepRoot.add(lines(lineGeo(circ, true), 0xf0a070, 0.75));
+      // radius spoke
+      stepRoot.add(lines(lineGeo([
+        [s[0], s[1], s[2]],
+        [circ[0][0], circ[0][1], circ[0][2]]
+      ]), 0xf0a070, 0.35));
+    }
+  }
+
+  function addFrames() {
+    var i;
+    var o = new THREE.Vector3();
+    var v = new THREE.Vector3();
+    for (i = 0; i < stations.length; i += 2) {
+      var s = stations[i], f = plainTube.frames[i];
+      o.set(s[0], s[1], s[2]);
+      var len = s[3] * 1.35;
+      stepRoot.add(makeArrow(o, v.set(f[6], f[7], f[8]), len * 1.2, 0xe8c27a)); // T
+      stepRoot.add(makeArrow(o, v.set(f[0], f[1], f[2]), len, 0x7ec8e3)); // N
+      stepRoot.add(makeArrow(o, v.set(f[3], f[4], f[5]), len, 0x9ad7a0)); // B
+    }
+  }
+
+  function addRingDots() {
+    var i, j, seg = T.radial;
+    for (i = 0; i < stations.length; i++) {
+      for (j = 0; j < seg; j++) {
+        var p = plainTube.ring(i, j);
+        var sg = new THREE.SphereGeometry(0.035, 6, 5);
+        var sm = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: 0x9ad7a0 }));
+        sm.position.set(p[0], p[1], p[2]);
+        stepRoot.add(sm);
+      }
+      // ring polyline
+      var circ = [];
+      for (j = 0; j <= seg; j++) {
+        var q = plainTube.ring(i, j);
+        circ.push([q[0], q[1], q[2]]);
+      }
+      stepRoot.add(lines(lineGeo(circ, true), 0x9ad7a0, 0.55));
+    }
+  }
+
+  function addButtresses(withTrunk) {
+    var i;
+    if (withTrunk) {
+      stepRoot.add(wireMesh(flutedTube.geo.clone(), 0xd4a5e8, 0.55));
+    }
+    for (i = 0; i < T.buttress; i++) {
+      var ang = i * (Math.PI * 2 / T.buttress) + (i % 2) * 0.12;
+      var reach = T.r * (2.2 + (i % 3) * 0.35);
+      var hg = T.bh * (0.85 + (i % 2) * 0.2);
+      var fin = buttressFin(T.r * 1.55, reach, hg, T.r * 0.4);
+      var mesh = wireMesh(fin, 0xe8b4a0, 0.9);
+      mesh.rotation.y = ang;
+      stepRoot.add(mesh);
+    }
+  }
+
+  function showStep(idx) {
+    clearStep();
+    var step = STEPS[idx];
+    switch (step.id) {
+      case 'axis':
+        addAxis();
+        break;
+      case 'stations':
+        addAxis();
+        addStations(true);
+        break;
+      case 'discs':
+        addAxis();
+        addStations(true);
+        addDiscs();
+        break;
+      case 'frames':
+        addAxis();
+        addStations(true);
+        addFrames();
+        break;
+      case 'rings':
+        addAxis();
+        addRingDots();
+        break;
+      case 'tube':
+        addAxis();
+        stepRoot.add(wireMesh(plainTube.geo.clone(), 0x7ec8e3, 0.9));
+        break;
+      case 'flute':
+        // ghost plain + fluted
+        stepRoot.add(wireMesh(plainTube.geo.clone(), 0x3a5058, 0.22));
+        stepRoot.add(wireMesh(flutedTube.geo.clone(), 0xd4a5e8, 0.95));
+        break;
+      case 'buttress':
+        addButtresses(false);
+        addAxis();
+        break;
+      case 'assemble':
+        addButtresses(true);
+        break;
+    }
+
+    document.getElementById('hudTitle').textContent = step.title;
+    document.getElementById('hudDesc').textContent = step.hud;
+
+    var items = document.querySelectorAll('.step-list li');
+    items.forEach(function (li, i) {
+      li.classList.toggle('active', i === idx);
+    });
+    document.getElementById('btnPrev').disabled = idx <= 0;
+    document.getElementById('btnNext').disabled = idx >= STEPS.length - 1;
+  }
+
+  // UI list
+  var list = document.getElementById('steps');
+  STEPS.forEach(function (s, i) {
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<div><span class="n">' + (i + 1) + '</span><span class="title">' +
+      s.title.replace(/^[①-⑨]\s*/, '') + '</span></div>' +
+      '<div class="blurb">' + s.blurb +
+      '<div class="formula">' + s.formula + '</div></div>';
+    li.addEventListener('click', function () {
+      cur = i; stopPlay(); showStep(cur);
+    });
+    list.appendChild(li);
+  });
+
+  var cur = 0;
+  var playTimer = null;
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    document.getElementById('btnPlay').textContent = '自动播放';
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', function () {
+    stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+  });
+  document.getElementById('btnNext').addEventListener('click', function () {
+    stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    if (playTimer) { stopPlay(); return; }
+    document.getElementById('btnPlay').textContent = '停止';
+    playTimer = setInterval(function () {
+      if (cur >= STEPS.length - 1) { cur = 0; }
+      else cur++;
+      showStep(cur);
+    }, 2200);
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+    orbit.spherical.set(12.5, 1.15, 0.55);
+    syncCam();
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+    } else if (e.key === 'ArrowLeft') {
+      stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+    }
+  });
+
+  function resize() {
+    var w = viewport.clientWidth, h = viewport.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  showStep(0);
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    // gentle auto yaw when idle
+    if (!orbit.dragging && !playTimer) {
+      orbit.spherical.theta += 0.0012;
+      syncCam();
+    }
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+</body>
+</html>

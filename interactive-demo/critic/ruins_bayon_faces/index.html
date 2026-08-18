@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build → Critic → Fix · Bayon Carved Faces (Mesh + Material)</title>
+<style>
+  :root {
+    --bg: #0c0f12;
+    --panel: #151a20;
+    --panel2: #1a2129;
+    --line: #2c3640;
+    --text: #d8dee6;
+    --muted: #8b96a3;
+    --accent: #c4a574;
+    --good: #7ec99a;
+    --bad: #e08a7a;
+    --stone: #a89878;
+    --moss: #6a9a6e;
+    --relief: #7ec8e3;
+    --wear: #d4a5e8;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 560px at 8% -8%, #243018 0%, transparent 55%),
+      radial-gradient(900px 480px at 92% 0%, #2a2218 0%, transparent 50%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 36px 22px 80px; }
+  header.hero {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: linear-gradient(160deg, #1c2218 0%, #12171c 70%);
+    padding: 28px 28px 24px;
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    color: var(--accent); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; margin: 0 0 8px;
+  }
+  h1 {
+    font-size: 1.5rem; font-weight: 650; margin: 0 0 10px;
+    letter-spacing: 0.01em; line-height: 1.3;
+  }
+  .lede { color: var(--muted); margin: 0 0 18px; max-width: 54em; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 12px; padding: 4px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: #0e1216;
+  }
+  .chip strong { color: var(--text); font-weight: 600; }
+  nav.toc {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 32px;
+  }
+  nav.toc a {
+    color: var(--muted); text-decoration: none; font-size: 12.5px;
+    border: 1px solid var(--line); padding: 6px 11px; border-radius: 6px;
+    background: var(--panel);
+  }
+  nav.toc a:hover { color: #fff; border-color: var(--accent); }
+  section {
+    margin-bottom: 36px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+  section > .hd {
+    padding: 16px 22px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel2);
+  }
+  section > .hd h2 {
+    margin: 0 0 4px; font-size: 1.12rem; font-weight: 650;
+  }
+  section > .hd p { margin: 0; color: var(--muted); font-size: 13px; }
+  section > .bd { padding: 20px 22px 24px; }
+  h3 {
+    font-size: 0.98rem; margin: 22px 0 10px; font-weight: 650;
+    color: #e8eef4;
+  }
+  h3:first-child { margin-top: 0; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: #10161c;
+    padding: 12px 14px;
+    margin: 14px 0;
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+  }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.good { border-left-color: var(--good); }
+  .grid2 {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .card {
+    background: #10161c; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 14px 12px;
+  }
+  .card h4 {
+    margin: 0 0 8px; font-size: 13px; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--muted); font-weight: 650;
+  }
+  .card.bad { border-color: #5a3a36; }
+  .card.good { border-color: #2f4a3a; }
+  pre, .code {
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    font-size: 12px; line-height: 1.5;
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+    color: #b8c4ce; margin: 10px 0 0;
+  }
+  .src {
+    font-size: 11.5px; color: var(--muted); margin-top: 6px;
+  }
+  .src code { color: var(--accent); }
+  ol.phases {
+    list-style: none; margin: 0; padding: 0;
+    display: grid; gap: 12px;
+  }
+  ol.phases > li {
+    display: grid; grid-template-columns: 56px 1fr; gap: 14px;
+    align-items: start;
+    background: #10161c; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px;
+  }
+  .phase-n {
+    width: 56px; height: 56px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .p-build { background: #1e2a24; color: var(--good); border: 1px solid #355043; }
+  .p-crit  { background: #2a2418; color: var(--accent); border: 1px solid #5a4a30; }
+  .p-fix   { background: #1a2430; color: var(--relief); border: 1px solid #355060; }
+  .p-ver   { background: #241c28; color: var(--wear); border: 1px solid #4a3855; }
+  .phase-body h4 { margin: 0 0 6px; font-size: 15px; }
+  .phase-body p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .phase-body ul {
+    margin: 8px 0 0; padding-left: 1.15em; color: var(--text); font-size: 13.5px;
+  }
+  .viz {
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 14px 12px; margin: 12px 0;
+  }
+  .viz-title {
+    font-size: 12px; color: var(--muted); margin: 0 0 12px;
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .pipe {
+    display: flex; flex-wrap: wrap; gap: 0; align-items: stretch;
+    margin: 10px 0 4px;
+  }
+  .pipe .step {
+    flex: 1 1 100px; min-width: 96px;
+    padding: 10px 8px; text-align: center;
+    border: 1px solid var(--line); background: #10161c;
+    font-size: 11.5px;
+  }
+  .pipe .step:first-child { border-radius: 8px 0 0 8px; }
+  .pipe .step:last-child { border-radius: 0 8px 8px 0; }
+  .pipe .step + .step { border-left: none; }
+  .pipe .step .n {
+    display: block; font-size: 10px; color: var(--muted); margin-bottom: 3px;
+  }
+  .pipe .step.miss { background: #2a1c1a; border-color: #5a3a36; color: var(--bad); }
+  .pipe .step.ok { background: #1a2e24; border-color: #355043; color: var(--good); }
+  .pipe .step.mat { background: #241c28; border-color: #4a3855; color: var(--wear); }
+  .pipe-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  table.compare {
+    width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px;
+  }
+  table.compare th, table.compare td {
+    border: 1px solid var(--line); padding: 8px 10px; text-align: left;
+    vertical-align: top;
+  }
+  table.compare th { background: #10161c; color: var(--muted); font-weight: 600; }
+  table.compare td.bad { color: var(--bad); }
+  table.compare td.good { color: var(--good); }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 0 0 12px;
+  }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 7px 12px; cursor: pointer; font: inherit;
+    font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.active { background: #2a3428; border-color: #4a6348; }
+  .foot {
+    margin-top: 8px; color: var(--muted); font-size: 12.5px; text-align: center;
+  }
+  kbd {
+    font: 11px ui-monospace, Consolas, monospace;
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 3px; padding: 1px 5px; color: var(--accent);
+  }
+  blockquote.shot {
+    margin: 0 0 14px;
+    padding: 16px 18px;
+    background: #0a0d10;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    color: #cdd6df;
+    font-size: 14px;
+    line-height: 1.7;
+    font-style: italic;
+  }
+  blockquote.shot cite {
+    display: block; margin-top: 10px; font-style: normal;
+    font-size: 12px; color: var(--muted);
+  }
+  .fail-list { margin: 8px 0 0; padding-left: 1.2em; font-size: 13.5px; }
+  .fail-list li { margin-bottom: 5px; }
+  .fail-list li::marker { color: var(--bad); }
+  .prompt-box {
+    background: #0a0d10; border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px;
+    font-family: ui-monospace, Consolas, "Cascadia Mono", monospace;
+    font-size: 12px; line-height: 1.55; color: #b8c4ce;
+    white-space: pre-wrap; margin: 10px 0 0;
+  }
+  .tag {
+    display: inline-block; font-size: 10.5px; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 2px 7px; border-radius: 3px;
+    border: 1px solid var(--line); color: var(--muted);
+    margin-right: 6px; vertical-align: 1px;
+  }
+  .tag.ad { border-color: #5a4a30; color: var(--accent); }
+  .tag.mesh { border-color: #355060; color: var(--relief); }
+  .tag.tex { border-color: #4a3855; color: var(--wear); }
+  .tag.crit { border-color: #6a3a34; color: var(--bad); }
+  /* face wireframe canvas */
+  .face-stage {
+    display: grid; grid-template-columns: 1fr 220px; gap: 14px; align-items: start;
+  }
+  @media (max-width: 760px) { .face-stage { grid-template-columns: 1fr; } }
+  #faceCanvas {
+    width: 100%; height: auto; display: block;
+    background: #0a0d10; border: 1px solid var(--line); border-radius: 8px;
+  }
+  .face-legend { font-size: 12.5px; color: var(--muted); }
+  .face-legend div { margin-bottom: 6px; }
+  .sw {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px;
+  }
+  .score-row {
+    display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 0;
+  }
+  .score {
+    flex: 1; min-width: 100px; text-align: center;
+    background: #10161c; border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 8px;
+  }
+  .score .n { display: block; font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .score .l { font-size: 11.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">survey/critic · 案例报告 · Mesh + 贴图/材质</p>
+  <h1>Bayon Ruins：塔有了，脸没有 → Critic 点名身份失败 → 浮雕网格 + 凹处 Wear</h1>
+  <p class="lede">
+    与 <a href="../harbor_splash_lightning_fork/" style="color:var(--accent)">harbor RNG 串流</a> 不同：
+    本例<strong>不涉及随机流错位</strong>。Round 3 的 Build 做了合格的 <code>faceTower</code> 砌石
+    （分层锥台、接缝、污垢），但五个已发布 framing 里<strong>没有任何浮雕人脸</strong>。
+    Critic 的 verdict 不是“再脏一点”，而是：
+    <em>“The Bayon face … is the level's identity failing.”</em>
+    Round 4 Fix：程序化高度场 → 浮雕三角网 → 顶点色凹处遮挡（贴图管线的 wear 合同），
+    分数 38→43，三角形 <strong>+77.4%</strong>。
+  </p>
+  <div class="meta">
+    <span class="chip"><strong>Mesh</strong> level_ruins.js · carvedFace / faceHeight</span>
+    <span class="chip"><strong>Wear/贴图</strong> vertex color R/G + stone materials</span>
+    <span class="chip"><strong>Brief</strong> LEVELS_ROSTER.md</span>
+    <span class="chip"><strong>Critic</strong> round4-workflow.js</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#brief">1. Roster / Art brief</a>
+  <a href="#contract">2. Mesh + Material contracts</a>
+  <a href="#critic">3. Critic 原文 + Schema</a>
+  <a href="#loop">4. Build → Critic → Fix</a>
+  <a href="#mesh">5. 几何管线可视化</a>
+  <a href="#tex">6. 贴图 / Wear 如何咬合</a>
+  <a href="#outcome">7. Round 4 结果与边界</a>
+  <a href="#parallel">8. 平行课：板缝是几何不是贴图</a>
+</nav>
+
+<!-- ============================================================ -->
+<section id="brief">
+  <div class="hd">
+    <h2>1. Roster / Art brief 原文</h2>
+    <p>身份写在关卡名与名单第一句里——Critic 只是把缺席说穿。</p>
+  </div>
+  <div class="bd">
+    <p><span class="tag ad">roster</span> <code>LEVELS_ROSTER.md</code> · <code>ruins</code> — Bayon Ruins</p>
+    <blockquote class="shot">
+      An overgrown stone temple complex at dawn in ground mist.
+      <strong>Carved faces</strong>, collapsed galleries, roots prising apart masonry,
+      moss and lichen, standing water in courtyards.
+      Soft low-angle light through mist with long god rays between towers.
+      The quietest level in the roster — its power is atmosphere and scale,
+      not intensity. Stone needs real weathering: water staining, biological growth,
+      chipped edges, differential erosion.
+      <cite>— LEVELS_ROSTER.md · ruins 条目（名单表也写 grey-gold / moss · dawn · ground mist）</cite>
+    </blockquote>
+
+    <h3>全局 Instant-fail（贴图 / 几何）</h3>
+    <ul class="fail-list">
+      <li>Any surface that is flat, untextured, or single-colour</li>
+      <li>Geometry with no silhouette detail — boxes standing in for objects</li>
+      <li>Perfectly clean, straight, or uniform anything</li>
+      <li>A level that photographs well in one pose and is empty everywhere else</li>
+      <li>Reusing another level's palette or lighting recipe</li>
+    </ul>
+    <p class="src">另见 <code>ARCHITECTURE.md</code> §9 Quality bar</p>
+
+    <div class="callout">
+      Critic 的杀伤力来自 brief 与画面的<strong>可核对缺口</strong>：
+      名单以 carved faces 起头，关卡以 Bayon 命名，五个 framing 里却一张脸都没有。
+      这不是品味分歧，是合同违约。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="contract">
+  <div class="hd">
+    <h2>2. Mesh + Material Contracts</h2>
+    <p>本例改的是关卡几何与顶点着色合同，不是 RNG 游标。</p>
+  </div>
+  <div class="bd">
+    <h3><span class="tag mesh">mesh</span> 关卡几何所有权</h3>
+    <table class="compare">
+      <thead><tr><th>条款</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>一人两文件</td>
+          <td><code>level_ruins.js</code> + <code>props_ruins.js</code>；Fix 不得改其它关卡 / 共享渲染（除非 Shared 相位）</td>
+        </tr>
+        <tr>
+          <td>发布合同保留</td>
+          <td><code>cameraPoses</code>（overview/hero1–3/interior）、anchors、lights、colliders、navGrid、raycast、sampleGround…</td>
+        </tr>
+        <tr>
+          <td>Builder 桶合并</td>
+          <td>浮雕面进石材材质桶，finalize 时 <code>mergeAll</code>；预算 ~500 draws / ~4.5M tris</td>
+        </tr>
+        <tr>
+          <td>轮廓必须出塔</td>
+          <td>脸相对塔身半宽注册；relief 过浅或 inset 过深 → 20 m 外读成“阶梯贴花”</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3><span class="tag tex">material / wear</span> 贴图与顶点色合同</h3>
+    <table class="compare">
+      <thead><tr><th>通道</th><th>合同</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Albedo / normal / ORM</td>
+          <td>石材走 procedural library（风化、生物附着）；禁止平面纯色盒子</td>
+        </tr>
+        <tr>
+          <td>Vertex color · white=pristine</td>
+          <td><strong>R</strong> grime · <strong>G</strong> wet · <strong>B</strong> edge wear（<code>materials.js</code>）</td>
+        </tr>
+        <tr>
+          <td>浮雕凹处烘焙</td>
+          <td>眼窝 / 唇缝等切口在高度场上“同深不同凹”；深度 alone 看不见 → 需 local concavity 写入 wear</td>
+        </tr>
+        <tr>
+          <td>贴图救不了缺几何</td>
+          <td>与 bunker <code>boardMarks</code> 同课：12 mm 板缝是几何台阶，不是噪声贴图</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre>// materials.js wear mask (contract)
+// white = pristine
+// R → grime darkening
+// G → wetness / film
+// B → edge wear / spall</pre>
+    <p class="src">浮雕侧实现见 <code>level_ruins.js</code> · carvedFace / <code>_paint</code> 凹处段</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="critic">
+  <div class="hd">
+    <h2>3. Critic 原文 + Schema</h2>
+    <p>harsh art director；对本关的 verdict 是整个 build 里唯一的“身份失败”。</p>
+  </div>
+  <div class="bd">
+    <h3><span class="tag crit">verdict</span> Round 3 → Round 4 Fix brief（原文）</h3>
+    <div class="prompt-box">Your critic's verdict names something different from every other level in the build:
+"The Bayon face. Everything else on this list is a defect; this one is the level's
+identity failing."
+
+1. THERE ARE NO CARVED FACES IN ANY OF THE FIVE PUBLISHED FRAMINGS. The roster brief
+   LEADS with "carved faces". Bayon is defined by them - it is the one thing a viewer
+   would recognise, and the level is named after it. You built a faceTower this round
+   with coursed frusta, per-course jog and per-course grime, which is good masonry -
+   and it has no face on it. This is your entire round if it needs to be. A carved
+   face is a hard procedural modelling problem: brow ridge, closed eyes, broad nose,
+   the wide serene mouth, an ear-to-crown headdress, all at a scale that reads at
+   20 m and survives at 3 m. Build it properly, put it where the camera already
+   looks, and light it so the relief reads.
+
+2. THE GROUND MIST IS STILL ABSENT FROM hero1 AND hero2. …
+3. MASONRY … still pristine 90-degree cuboids … apply reliefBox more widely.
+   Moss, lichen and vertical water staining DO work; keep them.
+4. hero1's grade_split …
+
+You have 95 draws and 2.83M triangles spare … A carved face can be expensive.</div>
+    <p class="src"><code>docs/round4-workflow.js</code> · LEVELS · ruins.task</p>
+
+    <h3>通用 Critic 角色提示（同轮）</h3>
+    <div class="prompt-box">You are a BRUTALLY HARSH art director who has shipped AAA shooters. …
+Grade against a shipped title, not against this level's own past, and do not
+inflate for effort.
+
+Capture … with --tag &lt;id&gt;crit … READ every PNG at full size and at 2x …
+run analyze.py … GATE ON coverage.dead_cell_med_pct (&lt; 12) …
+
+Read the level and props source behind everything you criticise. …
+hero1 is the signature image. Judge it hardest.
+
+Report a blunt verdict, a score, … findings each naming ONE owning file with a
+concrete technical remedy. State plainly whether this level is genuinely
+presentable or still reads as a tech demo, and why.</div>
+
+    <h3>Schema（可执行 finding）</h3>
+    <pre>findings[]: {
+  file:     "src/world/level_ruins.js",   // ONE owner
+  severity: "critical",
+  issue:    "No carved faces in any of five published framings;
+             faceTower is masonry-only; roster leads with carved faces.",
+  fix:      "Procedural faceHeight relief on storeys the camera already sees;
+             register against foot half-width; bake concavity into wear colors;
+             light so relief reads at 20 m."
+}</pre>
+
+    <div class="callout bad">
+      指标陷阱：本关 <strong>PASSES</strong> dead-region gate，但仍 38/100。
+      Critic 找的是身份缺席，不是曝光数字——metrics necessary, not sufficient。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="loop">
+  <div class="hd">
+    <h2>4. Build → Critic → Fix 时间线</h2>
+    <p>结构修复：补上 brief 要求的几何主体，再让材质 / wear 咬合浮雕。</p>
+  </div>
+  <div class="bd">
+    <ol class="phases">
+      <li>
+        <div class="phase-n p-build">BUILD</div>
+        <div class="phase-body">
+          <h4>Round 3：有塔，无脸</h4>
+          <p><code>faceTower</code>：分层锥台、per-course jog、grime——合格砌石。</p>
+          <ul>
+            <li>五个 framing：overview / hero1–3 / interior · firefight</li>
+            <li>签名 hero1：塔轮廓在，Bayon 可识别特征不在</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-crit">CRITIC</div>
+        <div class="phase-body">
+          <h4>身份失败（非 RNG、非调参）</h4>
+          <p>自有 tag 重拍 → 读图 → 对照 roster → 读源码确认 tower 无 face 发射。</p>
+          <ul>
+            <li>Score 38 · presentable: false</li>
+            <li>Verdict 点名 Bayon face 为 identity failure</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-fix">FIX</div>
+        <div class="phase-body">
+          <h4>Round 4：高度场浮雕 + 凹处 wear</h4>
+          <p><code>faceHeight(u,v)</code> 雕刻眉弓 / 闭眼 / 鼻 / 宽嘴 / 耳；
+            相对塔脚半宽注册；顶点 concavity 写入 grime/wet。</p>
+          <ul>
+            <li>放在镜头已对准的 storey</li>
+            <li>预算：故意烧三角形（有 2.83M spare）</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="phase-n p-ver">VERIFY</div>
+        <div class="phase-body">
+          <h4>脸存在；质量仍未“presentable”</h4>
+          <p>38 → 43；+77.4% tris。Critic 仍可读成 soft low-poly，而非完美砂岩雕——
+            循环会消缺陷，不自动生成“美”。</p>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="mesh">
+  <div class="hd">
+    <h2>5. 几何管线可视化</h2>
+    <p>切换 Round 3 / Round 4，看“砌石塔”与“浮雕脸”差在哪一层。</p>
+  </div>
+  <div class="bd">
+    <div class="controls">
+      <button type="button" id="btnR3" class="active">Round 3 · 有塔无脸</button>
+      <button type="button" id="btnR4">Round 4 · 浮雕人脸</button>
+    </div>
+
+    <div class="pipe" id="pipeViz" aria-label="mesh pipeline">
+      <!-- filled by JS -->
+    </div>
+    <p class="pipe-note" id="pipeNote"></p>
+
+    <div class="face-stage" style="margin-top:16px;">
+      <canvas id="faceCanvas" width="640" height="420"></canvas>
+      <div class="face-legend">
+        <div><span class="sw" style="background:var(--stone)"></span>塔身 / 砌石轮廓</div>
+        <div><span class="sw" style="background:var(--relief)"></span>浮雕高度场网格</div>
+        <div><span class="sw" style="background:#3a4550"></span>缺失的脸（R3）</div>
+        <div><span class="sw" style="background:var(--wear)"></span>凹处（眼窝/唇缝）</div>
+        <p class="muted" style="margin-top:12px;margin-bottom:0;">
+          示意：连续高度场 + 轮廓出石，而不是“贴一张脸贴图”。
+          真实实现是 3D 浮雕三角网，见 <code>faceHeight</code>。
+        </p>
+      </div>
+    </div>
+
+    <h3>关键注册错误（曾把脸“埋进石头”）</h3>
+    <div class="grid2">
+      <div class="card bad">
+        <h4>错误：对 mid 半宽注册</h4>
+        <p class="muted">塔身向上收分。对脸中部半宽取 inset 时，
+          下巴/嘴/鼻/眼都落在石头内部，只有冠部露出 → 远看像顶部小饰。</p>
+      </div>
+      <div class="card good">
+        <h4>正确：对 foot 半宽注册</h4>
+        <p class="muted">用脸底部（最宽）半宽；整头站出塔面，越往上越相对突出——与真 Bayon 一致。</p>
+      </div>
+    </div>
+    <pre>// level_ruins.js — face placement (concept)
+wantFace → fy, fh, hwBot / hwTop
+fw = min(hwMid * 1.86, fh * 1.10)
+oR = hwBot - inset          // register at FOOT
+fdp = fw * 0.160            // relief depth
+// then sample faceHeight(u,v) → displace along face normal</pre>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="tex">
+  <div class="hd">
+    <h2>6. 贴图 / Wear 如何咬合浮雕</h2>
+    <p>只有 mesh 凸起不够：切口与脸颊同深时，深度 AO 看不见唇缝——要贴图合同里的 concavity。</p>
+  </div>
+  <div class="bd">
+    <div class="grid2">
+      <div class="card">
+        <h4>深度能看见的</h4>
+        <ul>
+          <li>眼窝相对脸前平面后退</li>
+          <li>鼻下 / 下颌 moat</li>
+          <li>头外缘贴塔的角遮挡</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>深度看不见、靠 concavity 的</h4>
+        <ul>
+          <li>两唇之间的切口</li>
+          <li>眼睑缝</li>
+          <li>同深度上的雕刻线</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout good">
+      Fix 把局部凹度（高度场模糊 − 高度场）写入顶点色：
+      凹 → 拉高 grime / wet（变暗）；凸棱 → 偏淡 spall——
+      <strong>proud pale forms against dark cuts</strong>，仅靠天光也能读脸。
+      这是 mesh + wear 贴图合同的联合，不是换一张 albedo 脸贴图。
+    </div>
+
+    <pre>// _paint on carved face (concept from level_ruins.js)
+deep = saturate((F - oz) / dp)           // behind front plane
+concavity = blur(height) - height        // local cuts
+→ darken R (grime) and G (wet) in sockets / incisions
+→ pale B-ish substrate on brow arris / lid rim / lip</pre>
+
+    <h3>与“只调 UV / 噪声”的区别</h3>
+    <table class="compare">
+      <thead><tr><th>做法</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="bad">只在塔上铺更强石材噪声</td>
+          <td class="bad">仍是光秃塔；20 m 外无 Bayon 剪影</td>
+        </tr>
+        <tr>
+          <td class="bad">平面四边形 + 脸部 albedo 贴图</td>
+          <td class="bad">侧光无浮雕；违背“雕刻”brief；易 tiling / 卡片感</td>
+        </tr>
+        <tr>
+          <td class="good">高度场浮雕网格 + wear 凹处 + 石材 PBR</td>
+          <td class="good">轮廓与光影同时工作；贴图负责风化，几何负责身份</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="outcome">
+  <div class="hd">
+    <h2>7. Round 4 结果与边界</h2>
+    <p>循环消灭的是“缺席”；不保证“雕刻杰作”。</p>
+  </div>
+  <div class="bd">
+    <div class="score-row">
+      <div class="score"><span class="n">38</span><span class="l">Round 3 score</span></div>
+      <div class="score"><span class="n">43</span><span class="l">Round 4 score</span></div>
+      <div class="score"><span class="n">+77%</span><span class="l">triangles spent</span></div>
+      <div class="score"><span class="n">false</span><span class="l">presentable（仍）</span></div>
+    </div>
+
+    <blockquote class="shot" style="margin-top:18px;">
+      The clearest illustration of what a critic can and cannot do. …
+      Round 4 delivered four [faces], at the cost of +77% triangles …
+      This is the loop working exactly as designed: a critic can determine that
+      the defining feature of a level is <strong>absent</strong>. What no critic has ever
+      produced is the instruction that would have made the faces good rather than
+      merely present — round 4's critic still reads them as "soft low-poly forms
+      rather than carved sandstone."
+      <cite>— docs/technical-writeup.md §5.5</cite>
+    </blockquote>
+
+    <div class="callout">
+      <strong>对 Build/Fix agent：</strong>先满足 brief 的可核对条目（有没有脸），
+      再迭代浮雕比例 / 材质可读性。不要用“分数微调”代替身份几何。
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="parallel">
+  <div class="hd">
+    <h2>8. 平行课：板缝是几何，不是贴图</h2>
+    <p>同轮 bunker 的 form-board seams——再次证明 mesh 缺陷不能靠 SURF 噪声冒充。</p>
+  </div>
+  <div class="bd">
+    <pre>// level_bunker.js — why boardMarks exists
+// SURF.wall_conc declared board-marked concrete and nothing in the render
+// said it: … at 3-10 m … nothing to read but tiling. Texture cannot fix
+// that, because the thing missing is not texture: a form-board seam is a
+// 12 mm step … and a tie cone is a 30 mm recess … both are GEOMETRY.</pre>
+    <p class="src">Critic finding：<code>boardMarks()</code> 只到 y=6.40，而 RG_CEIL=11.00 → 镜头对着的墙 42% 无板缝。R4：缝接到顶，45→47。</p>
+
+    <table class="compare">
+      <thead><tr><th></th><th>Bayon faces</th><th>Bunker boardMarks</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>缺什么</td>
+          <td>身份主体（浮雕脸）</td>
+          <td>材料尺度几何（板缝/拉杆锥）</td>
+        </tr>
+        <tr>
+          <td>贴图能否冒充</td>
+          <td>不能（无剪影）</td>
+          <td>不能（无 12 mm 台阶）</td>
+        </tr>
+        <tr>
+          <td>Fix</td>
+          <td>高度场 mesh + wear</td>
+          <td>把 <code>boardMarks</code> y 范围接到天花板</td>
+        </tr>
+        <tr>
+          <td>RNG？</td>
+          <td>无关</td>
+          <td>无关</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<p class="foot">
+  <code>survey/critic/ruins_bayon_faces/</code>
+  · brief：<code>LEVELS_ROSTER.md</code>
+  · critic/fix：<code>docs/round4-workflow.js</code>
+  · mesh/wear：<code>src/world/level_ruins.js</code>
+  · 结果：<code>NEXT_ROUND.md</code> / <code>docs/technical-writeup.md</code>
+</p>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var pipe = document.getElementById('pipeViz');
+  var note = document.getElementById('pipeNote');
+  var canvas = document.getElementById('faceCanvas');
+  var ctx = canvas.getContext('2d');
+  var btnR3 = document.getElementById('btnR3');
+  var btnR4 = document.getElementById('btnR4');
+
+  var STEPS_R3 = [
+    { n: '1', t: 'plan tower', c: 'ok' },
+    { n: '2', t: 'coursed frusta', c: 'ok' },
+    { n: '3', t: 'jog + grime', c: 'ok' },
+    { n: '4', t: 'carved face', c: 'miss' },
+    { n: '5', t: 'wear paint', c: 'miss' },
+    { n: '6', t: 'stone PBR', c: 'ok' }
+  ];
+  var STEPS_R4 = [
+    { n: '1', t: 'plan tower', c: 'ok' },
+    { n: '2', t: 'coursed frusta', c: 'ok' },
+    { n: '3', t: 'jog + grime', c: 'ok' },
+    { n: '4', t: 'faceHeight field', c: 'ok' },
+    { n: '5', t: 'relief mesh', c: 'ok' },
+    { n: '6', t: 'concavity wear', c: 'mat' },
+    { n: '7', t: 'stone PBR', c: 'ok' }
+  ];
+
+  function renderPipe(round) {
+    var steps = round === 4 ? STEPS_R4 : STEPS_R3;
+    pipe.innerHTML = '';
+    steps.forEach(function (s) {
+      var d = document.createElement('div');
+      d.className = 'step ' + s.c;
+      d.innerHTML = '<span class="n">' + s.n + '</span>' + s.t;
+      pipe.appendChild(d);
+    });
+    note.textContent = round === 4
+      ? 'Round 4：在已有砌石之后追加浮雕高度场与凹处 wear——身份几何进入管线。'
+      : 'Round 3：砌石与石材 PBR 都在，但 carved face / wear 步骤缺失（红）。';
+    btnR3.classList.toggle('active', round === 3);
+    btnR4.classList.toggle('active', round === 4);
+    drawFace(round);
+  }
+
+  // Tiny illustrative height field (teaching aid, not game code)
+  function faceH(u, v) {
+    var au = Math.abs(u);
+    var core = Math.max(0, 1 - Math.pow(au / 0.85, 3) - Math.pow((v - 0.5) / 0.5, 2.8));
+    var z = 0.35 + 0.55 * Math.pow(core, 0.5);
+    z += 0.12 * Math.exp(-Math.pow((v - 0.33) / 0.12, 2)) * Math.exp(-Math.pow((au - 0.45) / 0.25, 2));
+    // brow
+    z += 0.14 * Math.exp(-Math.pow((v - 0.62) / 0.04, 2)) * Math.exp(-Math.pow((au - 0.32) / 0.28, 2));
+    z -= 0.10 * Math.exp(-Math.pow((v - 0.57) / 0.02, 2)) * Math.exp(-Math.pow((au - 0.32) / 0.28, 2));
+    // eyes sockets
+    for (var s = -1; s <= 1; s += 2) {
+      var du = u - s * 0.34;
+      var sock = Math.exp(-Math.pow(du / 0.16, 2) - Math.pow((v - 0.50) / 0.05, 2));
+      z -= 0.12 * sock;
+      z += 0.10 * Math.sqrt(Math.max(0, 1 - Math.pow(du / 0.14, 2) - Math.pow((v - 0.50) / 0.035, 2)));
+    }
+    // mouth
+    z -= 0.11 * Math.exp(-Math.pow(u / 0.22, 2) - Math.pow((v - 0.28) / 0.03, 2));
+    z += 0.06 * Math.exp(-Math.pow(u / 0.18, 2) - Math.pow((v - 0.31) / 0.025, 2));
+    return z * core;
+  }
+
+  function drawFace(round) {
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    // ground mist vibe
+    var g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#1a2430');
+    g.addColorStop(1, '#0e1210');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+
+    // tower trapezoid
+    var cx = w * 0.52, top = 36, bot = h - 40;
+    var tw = 70, bw = 150;
+    ctx.fillStyle = '#3a3630';
+    ctx.beginPath();
+    ctx.moveTo(cx - tw, top);
+    ctx.lineTo(cx + tw, top);
+    ctx.lineTo(cx + bw, bot);
+    ctx.lineTo(cx - bw, bot);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#6a6255';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // course lines
+    ctx.strokeStyle = 'rgba(160,140,110,0.35)';
+    ctx.lineWidth = 1;
+    var i;
+    for (i = 1; i < 6; i++) {
+      var t = i / 6;
+      var y = top + (bot - top) * t;
+      var hw = tw + (bw - tw) * t;
+      ctx.beginPath();
+      ctx.moveTo(cx - hw + 4, y);
+      ctx.lineTo(cx + hw - 4, y);
+      ctx.stroke();
+    }
+
+    if (round === 3) {
+      // missing face placeholder
+      ctx.strokeStyle = '#e08a7a';
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 2;
+      var fy0 = top + (bot - top) * 0.28;
+      var fy1 = top + (bot - top) * 0.72;
+      var fx = 88;
+      ctx.strokeRect(cx - fx, fy0, fx * 2, fy1 - fy0);
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#e08a7a';
+      ctx.font = '13px Segoe UI, sans-serif';
+      ctx.fillText('NO CARVED FACE', cx - 58, (fy0 + fy1) / 2);
+      ctx.fillStyle = '#8b96a3';
+      ctx.font = '11px Segoe UI, sans-serif';
+      ctx.fillText('masonry only · identity absent', cx - 78, (fy0 + fy1) / 2 + 18);
+      return;
+    }
+
+    // relief mesh
+    var nu = 22, nv = 28;
+    var x0 = cx - 95, y0 = top + (bot - top) * 0.22;
+    var fw = 190, fh = (bot - top) * 0.55;
+    ctx.lineWidth = 0.7;
+    for (var j = 0; j < nv; j++) {
+      for (var i2 = 0; i2 < nu; i2++) {
+        var u0 = i2 / nu * 2 - 1, v0 = 1 - j / nv;
+        var u1 = (i2 + 1) / nu * 2 - 1, v1 = 1 - (j + 1) / nv;
+        var z00 = faceH(u0, v0), z10 = faceH(u1, v0);
+        var z01 = faceH(u0, v1), z11 = faceH(u1, v1);
+        if (z00 + z10 + z01 + z11 < 0.05) continue;
+        var shade = 0.35 + 0.65 * ((z00 + z11) * 0.5);
+        var conc = Math.max(0, (z00 + z10 + z01 + z11) * 0.25 - Math.min(z00, z10, z01, z11));
+        var r = Math.floor(120 + shade * 80 - conc * 180);
+        var g2 = Math.floor(110 + shade * 70 - conc * 140);
+        var b = Math.floor(90 + shade * 50 - conc * 80);
+        ctx.fillStyle = 'rgb(' + r + ',' + g2 + ',' + b + ')';
+        ctx.strokeStyle = 'rgba(126,200,227,' + (0.15 + shade * 0.35) + ')';
+        function P(u, v, z) {
+          return [
+            x0 + (u + 1) * 0.5 * fw + z * 18,
+            y0 + (1 - v) * fh - z * 10
+          ];
+        }
+        var a = P(u0, v0, z00), b2 = P(u1, v0, z10), c = P(u1, v1, z11), d = P(u0, v1, z01);
+        ctx.beginPath();
+        ctx.moveTo(a[0], a[1]);
+        ctx.lineTo(b2[0], b2[1]);
+        ctx.lineTo(c[0], c[1]);
+        ctx.lineTo(d[0], d[1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  btnR3.addEventListener('click', function () { renderPipe(3); });
+  btnR4.addEventListener('click', function () { renderPipe(4); });
+  renderPipe(3);
+})();
+</script>
+</body>
+</html>

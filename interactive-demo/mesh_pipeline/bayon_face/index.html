@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bayon 雕像人脸 · 高度场分步演示</title>
+<style>
+  :root {
+    --bg: #0e1114; --panel: #161b20; --line: #2a323a;
+    --text: #d6dde4; --muted: #8b96a3; --accent: #c4a574;
+    --mask: #7ec8e3; --mass: #9ad7a0; --feat: #e8c27a;
+    --eye: #f0a070; --mouth: #e8b4a0; --cav: #d4a5e8;
+    --moss: #6a9a5a; --grid: #5a6a78;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .app {
+    display: grid; grid-template-columns: minmax(300px, 410px) 1fr; height: 100%;
+  }
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: auto 55vh; }
+  }
+  .side {
+    background: var(--panel); border-right: 1px solid var(--line);
+    overflow: auto; padding: 22px 20px 40px;
+  }
+  h1 { font-size: 1.15rem; font-weight: 600; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; }
+  .sub code {
+    font-size: 11px; color: var(--accent);
+    background: #0e1114; padding: 1px 5px; border-radius: 3px;
+  }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  button {
+    background: #1e262e; color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 7px 12px; cursor: pointer; font: inherit;
+  }
+  button:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: #2a3428; border-color: #4a6348; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  .step-list { list-style: none; margin: 0; padding: 0; }
+  .step-list li {
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
+  }
+  .step-list li:hover { border-color: #3d4a55; }
+  .step-list li.active { border-color: var(--accent); background: #1c2228; }
+  .step-list .n { display: inline-block; width: 1.6em; color: var(--accent); font-weight: 600; }
+  .step-list .title { font-weight: 600; }
+  .step-list .blurb { display: none; margin-top: 8px; color: var(--muted); font-size: 12.5px; }
+  .step-list li.active .blurb { display: block; }
+  .formula {
+    margin-top: 8px; padding: 8px 10px; background: #0e1114; border-radius: 4px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px; color: #b8c4ce; white-space: pre-wrap;
+  }
+  .legend {
+    margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 6px; vertical-align: -1px;
+  }
+  .viewport { position: relative; background: #0a0c0e; min-height: 320px; }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud {
+    position: absolute; left: 16px; top: 14px; right: 16px;
+    pointer-events: none;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .badge {
+    background: rgba(14,17,20,0.82); border: 1px solid var(--line);
+    border-radius: 6px; padding: 10px 14px; max-width: 460px;
+  }
+  .badge h2 { margin: 0 0 4px; font-size: 14px; color: #fff; font-weight: 600; }
+  .badge p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .hint {
+    font-size: 11px; color: var(--muted);
+    background: rgba(14,17,20,0.7); padding: 6px 10px; border-radius: 4px;
+  }
+  .err {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; padding: 24px; text-align: center; color: #e8a0a0;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>Bayon 人脸 · 高度场分步</h1>
+    <p class="sub">
+      复现 <code>level_ruins.js</code>：
+      <code>faceMask → faceHeight → carvedFace → faceTag 烘焙</code>。
+      不是叠盒子，是连续曲面 <code>z=f(u,v)</code>。拖拽旋转，滚轮缩放。
+    </p>
+    <div class="controls">
+      <button type="button" id="btnPrev">上一步</button>
+      <button type="button" id="btnNext" class="primary">下一步</button>
+      <button type="button" id="btnPlay">自动播放</button>
+      <button type="button" id="btnReset">重置视角</button>
+    </div>
+    <ol class="step-list" id="steps"></ol>
+    <div class="legend">
+      <div><span class="swatch" style="background:var(--mask)"></span>轮廓 mask</div>
+      <div><span class="swatch" style="background:var(--mass)"></span>体量 plateau</div>
+      <div><span class="swatch" style="background:var(--feat)"></span>眉 / 鼻 / 冠</div>
+      <div><span class="swatch" style="background:var(--eye)"></span>眼睑 / 眼窝</div>
+      <div><span class="swatch" style="background:var(--mouth)"></span>微笑唇线</div>
+      <div><span class="swatch" style="background:var(--cav)"></span>局部凹度</div>
+      <div><span class="swatch" style="background:var(--moss)"></span>边缘苔藓</div>
+    </div>
+  </aside>
+  <main class="viewport" id="viewport">
+    <div class="hud">
+      <div class="badge">
+        <h2 id="hudTitle">—</h2>
+        <p id="hudDesc">—</p>
+      </div>
+      <div class="hint">拖拽旋转 · 滚轮缩放 · ← → 切换步骤</div>
+    </div>
+  </main>
+</div>
+
+<script src="../../vendor/three.global.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  if (!window.THREE) {
+    document.getElementById('viewport').innerHTML =
+      '<div class="err">无法加载 <code>../../vendor/three.global.js</code>。<br/>' +
+      '请从仓库根用 HTTP 打开 <code>survey/mesh_pipeline/bayon_face/</code></div>';
+    return;
+  }
+  var THREE = window.THREE;
+
+  // Viewing-scale face (central prasat face ~5–6 m wide in game)
+  var W = 3.6, H = 5.4, DP = W * 0.160;
+  var NU = 56, NV = 64; // denser than game floor for demo clarity; game uses max(68,…)
+  var ERODE = 0.35;
+
+  function sat(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function smoothstep(e0, e1, x) {
+    var t = sat((x - e0) / (e1 - e0));
+    return t * t * (3 - 2 * t);
+  }
+  function fg(d, r) { d = d / r; return Math.exp(-d * d); }
+  function hash2(x, y) {
+    var n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  function fbm2(x, y, oct) {
+    var a = 0, f = 1, g = 0.5, i;
+    for (i = 0; i < (oct || 3); i++) {
+      a += g * (hash2(x * f, y * f) * 2 - 1);
+      f *= 2; g *= 0.5;
+    }
+    return a;
+  }
+
+  // Faithful ports from level_ruins.js
+  function faceMask(u, v) {
+    var au = Math.abs(u);
+    var hd = 1 - Math.pow(au / 0.855, 3.1) - Math.pow(Math.abs(v - 0.500) / 0.500, 2.9);
+    var eu = (au - 0.905) / 0.098, ev = (v - 0.430) / 0.255;
+    var ed = 0.85 * (1 - eu * eu - ev * ev);
+    var lu = (au - 0.888) / 0.076, lv = (v - 0.198) / 0.120;
+    var ld = 0.85 * (1 - lu * lu - lv * lv);
+    return Math.max(hd, Math.max(ed, ld));
+  }
+
+  // feature flags for progressive reveal
+  var FEAT = {
+    mass: true, ear: true, brow: true, eye: true,
+    nose: true, mouth: true, diadem: true, weather: true
+  };
+
+  function faceHeight(u, v, P) {
+    var au = Math.abs(u), i;
+    var hd = 1 - Math.pow(au / 0.855, 3.1) - Math.pow(Math.abs(v - 0.500) / 0.500, 2.9);
+    var core = sat(hd);
+    var z = 0;
+
+    if (FEAT.mass) {
+      z = 0.36 + 0.60 * Math.pow(core, 0.46);
+      z *= 1 - 0.12 * smoothstep(0.62, 1.00, v);
+      z += 0.16 * fg(v - 0.330, 0.150) * fg(au - 0.480, 0.280) * core;
+      z += 0.10 * fg(v - 0.130, 0.075) * fg(u, 0.280);
+      z -= 0.07 * fg(v - 0.075, 0.030) * sat(1 - Math.pow(au / 0.30, 2));
+    }
+
+    if (FEAT.ear) {
+      var eu = (au - 0.905) / 0.098, ev = (v - 0.430) / 0.255;
+      var lu = (au - 0.888) / 0.076, lv = (v - 0.198) / 0.120;
+      var ear = sat(Math.max(1 - eu * eu - ev * ev, 1 - lu * lu - lv * lv));
+      if (ear > 0) {
+        var ez = 0.30 + 0.30 * Math.pow(ear, 0.45);
+        if (ez > z) z = ez;
+        z -= 0.20 * fg(au - 0.902, 0.036) * smoothstep(0.22, 0.31, v) *
+          smoothstep(0.58, 0.47, v);
+      }
+    }
+
+    if (FEAT.brow) {
+      var bV = 0.606 + 0.040 * Math.cos(Math.PI * clamp((au - 0.345) / 0.380, -1, 1));
+      var bW = smoothstep(0.780, 0.520, au);
+      z += 0.19 * bW * fg(v - bV, 0.043);
+      z -= 0.15 * bW * fg(v - (bV - 0.052), 0.022);
+    }
+
+    if (FEAT.eye) {
+      for (i = -1; i <= 1; i += 2) {
+        var ec = i * 0.345;
+        var du = u - ec;
+        var sE = 1 - Math.pow(du / 0.288, 2) - Math.pow((v - 0.500) / 0.080, 2);
+        if (sE <= -0.55) continue;
+        z -= 0.15 * smoothstep(-0.15, 0.60, sE);
+        var lE = sat(1 - Math.pow(du / 0.205, 2) - Math.pow((v - 0.500) / 0.048, 2));
+        z += 0.17 * Math.sqrt(lE);
+        var lash = 0.505 + 0.013 * (1 - Math.pow(clamp(du / 0.205, -1, 1), 2));
+        z -= 0.21 * Math.sqrt(sat(lE + 0.30)) * fg(v - lash, 0.0135);
+        z -= 0.10 * fg(du - i * 0.232, 0.040) * fg(v - 0.490, 0.020);
+      }
+    }
+
+    if (FEAT.nose) {
+      var nP = smoothstep(0.660, 0.505, v) * smoothstep(0.300, 0.348, v);
+      var nw = 0.070 + 0.135 * smoothstep(0.600, 0.348, v);
+      var nX = sat(1 - Math.pow(au / nw, 2.1));
+      z += 0.58 * nP * Math.pow(nX, 0.42);
+      z += 0.11 * fg(v - 0.368, 0.024) * (fg(u - 0.132, 0.038) + fg(u + 0.132, 0.038));
+      z -= 0.15 * fg(v - 0.348, 0.016) * (fg(u - 0.100, 0.026) + fg(u + 0.100, 0.026));
+      z -= 0.19 * fg(v - 0.312, 0.015) * sat(1 - Math.pow(au / 0.235, 2));
+    }
+
+    if (FEAT.mouth) {
+      var mH = 0.360;
+      var mE = sat(1 - Math.pow(au / mH, 2.0));
+      var lipV = 0.222 + 0.030 * Math.pow(sat(au / mH), 1.7);
+      z += 0.15 * Math.pow(mE, 0.45) * fg(v - (lipV + 0.036), 0.028);
+      z += 0.13 * Math.pow(mE, 0.45) * fg(v - (lipV - 0.033), 0.026);
+      z -= 0.24 * Math.pow(mE, 0.22) * fg(v - lipV, 0.0135);
+      z -= 0.11 * fg(au - mH * 0.955, 0.030) * fg(v - lipV, 0.022);
+    }
+
+    if (FEAT.diadem) {
+      var dW = smoothstep(0.860, 0.700, au);
+      z -= 0.11 * dW * fg(v - 0.706, 0.014);
+      z += 0.24 * dW * smoothstep(0.716, 0.748, v) * smoothstep(0.852, 0.814, v);
+      z += 0.09 * dW * fg(v - 0.792, 0.038) *
+        (fg(u, 0.085) + fg(au - 0.330, 0.080));
+    }
+
+    if (FEAT.weather) {
+      z += fbm2(u * 2.7 + P.s0, v * 3.1 + P.s1, 3) * 0.085;
+      var sp = fbm2(u * 1.9 + P.s0 + 37.1, v * 2.3 + P.s1 - 21.7, 2);
+      var keep = smoothstep(0.05, 0.16, v) * smoothstep(0.88, 0.76, v) *
+        smoothstep(0.86, 0.70, au);
+      z -= sat((sp - (1.02 - P.e * 0.92)) * 3.4) * 0.70 * (1 - keep * 0.72);
+    }
+    return z;
+  }
+
+  var P = { e: ERODE, s0: 12.4, s1: -7.1 };
+
+  function setFeat(flags) {
+    var k;
+    for (k in FEAT) FEAT[k] = false;
+    for (k in flags) if (flags[k]) FEAT[k] = true;
+  }
+
+  // Build heightfield mesh data
+  function buildField() {
+    var gw = NU + 1, gh = NV + 1, nv = gw * gh;
+    var pos = new Float32Array(nv * 3);
+    var hz = new Float32Array(nv);
+    var mk = new Float32Array(nv);
+    var back = -0.55;
+    var i, j, idx;
+    for (j = 0; j < gh; j++) {
+      var vv = j / NV;
+      for (i = 0; i < gw; i++) {
+        var uu = i / NU * 2 - 1;
+        idx = j * gw + i;
+        var d = faceMask(uu, vv);
+        mk[idx] = d;
+        var fz = (d > -0.30) ? faceHeight(uu, vv, P) : back;
+        var m = smoothstep(-0.02, 0.20, d);
+        var zz = back + (fz - back) * m;
+        hz[idx] = fz;
+        pos[idx * 3] = uu * W * 0.5;
+        pos[idx * 3 + 1] = vv * H;
+        pos[idx * 3 + 2] = zz * DP;
+      }
+    }
+    // concavity
+    var cav = new Float32Array(nv);
+    var tmp = new Float32Array(nv);
+    var R = 2, k;
+    for (j = 0; j < gh; j++) {
+      for (i = 0; i < gw; i++) {
+        var sA = 0, nA = 0;
+        for (k = -R; k <= R; k++) {
+          var ii = i + k; if (ii < 0 || ii >= gw) continue;
+          sA += hz[j * gw + ii]; nA++;
+        }
+        tmp[j * gw + i] = sA / (nA || 1);
+      }
+    }
+    for (i = 0; i < gw; i++) {
+      for (j = 0; j < gh; j++) {
+        var sB = 0, nB = 0;
+        for (k = -R; k <= R; k++) {
+          var jj = j + k; if (jj < 0 || jj >= gh) continue;
+          sB += tmp[jj * gw + i]; nB++;
+        }
+        cav[j * gw + i] = sB / (nB || 1) - hz[j * gw + i];
+      }
+    }
+    return { pos: pos, hz: hz, mk: mk, cav: cav, gw: gw, gh: gh };
+  }
+
+  function wireFromField(field, opts) {
+    opts = opts || {};
+    var arr = [], i, j;
+    var gw = field.gw, gh = field.gh, pos = field.pos, mk = field.mk;
+    var cavThresh = opts.cavThresh;
+    var mossOnly = opts.mossOnly;
+    var hideOutside = opts.hideOutside !== false;
+
+    function pushEdge(a, b) {
+      if (hideOutside && mk[a] < -0.05 && mk[b] < -0.05) return;
+      if (cavThresh !== undefined) {
+        var c = (field.cav[a] + field.cav[b]) * 0.5;
+        if (c < cavThresh) return;
+      }
+      if (mossOnly) {
+        var ua = ((a % gw) / NU) * 2 - 1, va = Math.floor(a / gw) / NV;
+        var ub = ((b % gw) / NU) * 2 - 1, vb = Math.floor(b / gw) / NV;
+        var aq = Math.abs((ua + ub) * 0.5), vq = (va + vb) * 0.5;
+        var margin = (aq > 0.56 || vq < 0.17 || vq > 0.84) ? 1 : 0;
+        if (!margin) return;
+      }
+      arr.push(pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2],
+        pos[b * 3], pos[b * 3 + 1], pos[b * 3 + 2]);
+    }
+
+    for (j = 0; j < gh; j++) {
+      for (i = 0; i < gw - 1; i++) pushEdge(j * gw + i, j * gw + i + 1);
+    }
+    for (i = 0; i < gw; i++) {
+      for (j = 0; j < gh - 1; j++) pushEdge(j * gw + i, (j + 1) * gw + i);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  function outlineMask() {
+    // sample contour where mask ≈ 0
+    var pts = [], samples = 180, t;
+    for (t = 0; t < samples; t++) {
+      var a = t / samples * Math.PI * 2;
+      // ray march from outside in
+      var r;
+      for (r = 1.2; r > 0.05; r -= 0.015) {
+        var u = Math.cos(a) * r;
+        var v = 0.5 + Math.sin(a) * r * 0.5;
+        if (faceMask(u, v) > 0) {
+          pts.push([u * W * 0.5, v * H, -0.02]);
+          break;
+        }
+      }
+    }
+    return pts;
+  }
+
+  function landmarkDots() {
+    // anatomy landmarks in (u,v)
+    return [
+      { u: 0, v: 0.03, c: 0x9ad7a0, l: 'chin' },
+      { u: 0, v: 0.22, c: 0xe8b4a0, l: 'mouth' },
+      { u: 0, v: 0.36, c: 0xe8c27a, l: 'nose' },
+      { u: -0.345, v: 0.52, c: 0xf0a070, l: 'eyeL' },
+      { u: 0.345, v: 0.52, c: 0xf0a070, l: 'eyeR' },
+      { u: 0, v: 0.61, c: 0xe8c27a, l: 'brow' },
+      { u: 0, v: 0.75, c: 0xd4a5e8, l: 'diadem' },
+      { u: 0, v: 0.97, c: 0x7ec8e3, l: 'crown' }
+    ];
+  }
+
+  function lines(geo, color, opacity) {
+    return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: color, transparent: true, opacity: opacity === undefined ? 1 : opacity
+    }));
+  }
+
+  function lineGeo(points, closed) {
+    var arr = [], i, n = points.length;
+    for (i = 0; i < n - 1; i++) {
+      arr.push(points[i][0], points[i][1], points[i][2],
+        points[i + 1][0], points[i + 1][1], points[i + 1][2]);
+    }
+    if (closed && n > 2) {
+      arr.push(points[n - 1][0], points[n - 1][1], points[n - 1][2],
+        points[0][0], points[0][1], points[0][2]);
+    }
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    return g;
+  }
+
+  // --------------------------------------------------------------------------
+  var STEPS = [
+    {
+      id: 'uv',
+      title: '① UV 解剖域',
+      hud: 'u∈[-1,1] 半宽 · v∈[0,1] 下巴→冠顶',
+      blurb: '人脸不是盒子堆。先在参数平面上标定解剖：下巴 0.03、嘴 0.22、鼻根 0.36、眼 0.52、眉 0.61、头冠 0.75、冠顶 0.97。注意 u 与 v 单位不同：圆形在石头上对应 v 半径 ≈ 0.545×u 半径。',
+      formula: '0.03 chin  0.22 mouth  0.36 nose\n0.52 eye   0.61 brow   0.75 diadem\n0.97 crown\neye centre |u|=0.345  (头宽的 3/10)'
+    },
+    {
+      id: 'mask',
+      title: '② faceMask 轮廓',
+      hud: '超椭圆头形 + 耳垂叶瓣 = 剪影',
+      blurb: 'mask>0 在头内。网格器对 mask 外的四边形直接丢弃，所以网格边界就是下巴/太阳穴/冠的轮廓，而不是一堆方块的包围盒。',
+      formula: 'hd = 1 − (|u|/0.855)^3.1 − (|v−0.5|/0.5)^2.9\near / lobe = 额外椭圆叶\nmask = max(hd, ear, lobe)'
+    },
+    {
+      id: 'mass',
+      title: '③ 体量 plateau',
+      hud: '高原 + 穹顶——宁静来自大片平滑面',
+      blurb: 'Bayon 脸是“安详”：大块平滑颊与额，特征只是浅调制。只有穹顶会切线落到背平面，轮廓消失；高原给出可跌落的崖边。',
+      formula: 'z = 0.36 + 0.60 · core^0.46\nz *= 1 − 0.12·smoothstep(额)\n+ 颊垫 + 下巴垫'
+    },
+    {
+      id: 'brow_eye',
+      title: '④ 眉脊 + 闭眼',
+      hud: '眉脊下切 + 杏仁眼睑 + 睫毛刻线',
+      blurb: '眉是 RIDGE 不是横条（0.19 dp）。眼睑 0.205×0.048 u/v ≈ 4.6:1 杏仁。睫毛切口 0.0135 v——绝对深度测不到，靠后面凹度烘焙。',
+      formula: 'brow += 0.19·gauss − 0.15·下切\nsocket −= 0.15\nlid += 0.17·√lens\nlash −= 0.21·gauss(0.0135)'
+    },
+    {
+      id: 'nose_mouth',
+      title: '⑤ 宽鼻 + 微笑',
+      hud: '微笑是整张脸的读法——嘴角只抬 16 cm',
+      blurb: '鼻尖约 0.58 dp 前突。嘴半宽 0.36 u（头宽 42%）；嘴角抬 0.030 v。第一版用 0.062 变成咧嘴笑。唇沟同样靠凹度而非绝对深度变黑。',
+      formula: 'nose += 0.58·nP·nX^0.42\nlipV = 0.222 + 0.030·(|u|/mH)^1.7\nlips ±gauss；沟 −= 0.24'
+    },
+    {
+      id: 'full',
+      title: '⑥ 冠带 + 风化',
+      hud: '头冠波纹 + 九百年季风剥蚀',
+      blurb: '冠是 BAND 而非一排尖齿。fbm 微起伏；剥蚀避开五官（keep 掩码），否则眼睛被吃掉会成废墟，但处处被吃只是石头。',
+      formula: 'diadem band + scallop\nz += fbm·0.085\nz −= spall · (1−keep)·erode'
+    },
+    {
+      id: 'mesh',
+      title: '⑦ 采样成网',
+      hud: '按脸分辨率采样（非固定 texels/m）',
+      blurb: 'NU/NV 按脸高定下限（≥68×72），使嘴线/睫毛线约占一格。固定 14/m 会让小脸丢嘴。z 从 back 平面混合到高度场，形成埋入塔身的剪影。',
+      formula: 'NU = clamp(round(w·14), 68, 104)\nNV = clamp(round(h·14), 72, 112)\nzz = back + (fz−back)·smooth(mask)'
+    },
+    {
+      id: 'cav',
+      title: '⑧ 局部凹度',
+      hud: 'blur(z)−z：找出深度看不见的刻线',
+      blurb: '睫毛与唇缝和旁边脸颊同一绝对深度，深度 AO 看不见。2-cell 盒模糊减自身 → 正值=切口。写入 faceCav，_paint 烘焙进 grime/wet。',
+      formula: 'cav = boxBlur₂(hz) − hz\nao += saturate(cav·5.5)\nproud (−cav) → 淡色边缘磨损'
+    },
+    {
+      id: 'paint',
+      title: '⑨ 材质分裂 + 上塔',
+      hud: 'sandstone / mossy 分桶 · faceTag 烘焙 · 装上 prasat',
+      blurb: '主体进 sandstone；边缘苔藓进 mossy（苔藓可以斑驳）。faceTag 记录朝向与前平面 F=1.0·dp，socket/颌下按深度连续变暗。冠用 frustum 盒子做天际剪影。',
+      formula: 'B.faceTag = {yaw, F:1.0·dp, …}\nB.add(\'sandstone\'|\'mossy\', …)\nfaceTower: 第2层四面各一脸'
+    }
+  ];
+
+  // Scene
+  var viewport = document.getElementById('viewport');
+  var renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setClearColor(0x0a0c0e, 1);
+  viewport.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(40, 1, 0.05, 100);
+  var root = new THREE.Group();
+  root.position.set(0, -H * 0.45, 0);
+  scene.add(root);
+  var stepRoot = new THREE.Group();
+  root.add(stepRoot);
+
+  var grid = new THREE.GridHelper(10, 10, 0x243038, 0x1a2228);
+  grid.position.y = -0.05;
+  root.add(grid);
+
+  // The face geometry spans y=0..H, then root shifts it down by H*0.45.
+  // Aim at the resulting world-space face centre and start nearly head-on.
+  var DEFAULT_CAMERA = {
+    target: new THREE.Vector3(0, H * 0.05, DP * 0.3),
+    radius: 8.8,
+    phi: 1.48,
+    theta: 0.08
+  };
+  var orbit = {
+    target: DEFAULT_CAMERA.target.clone(),
+    spherical: new THREE.Spherical(
+      DEFAULT_CAMERA.radius,
+      DEFAULT_CAMERA.phi,
+      DEFAULT_CAMERA.theta
+    ),
+    dragging: false, px: 0, py: 0
+  };
+  function syncCam() {
+    camera.position.setFromSpherical(orbit.spherical);
+    camera.position.add(orbit.target);
+    camera.lookAt(orbit.target);
+  }
+  syncCam();
+
+  viewport.addEventListener('pointerdown', function (e) {
+    orbit.dragging = true; orbit.px = e.clientX; orbit.py = e.clientY;
+    viewport.setPointerCapture(e.pointerId);
+  });
+  viewport.addEventListener('pointerup', function () { orbit.dragging = false; });
+  viewport.addEventListener('pointermove', function (e) {
+    if (!orbit.dragging) return;
+    var dx = e.clientX - orbit.px, dy = e.clientY - orbit.py;
+    orbit.px = e.clientX; orbit.py = e.clientY;
+    orbit.spherical.theta -= dx * 0.005;
+    orbit.spherical.phi = Math.max(0.15, Math.min(Math.PI - 0.15, orbit.spherical.phi + dy * 0.005));
+    syncCam();
+  });
+  viewport.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    orbit.spherical.radius = Math.max(4, Math.min(22, orbit.spherical.radius * (1 + e.deltaY * 0.001)));
+    syncCam();
+  }, { passive: false });
+
+  function clearStep() {
+    while (stepRoot.children.length) {
+      var c = stepRoot.children[0];
+      stepRoot.remove(c);
+      c.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (Array.isArray(o.material)) o.material.forEach(function (m) { m.dispose(); });
+          else o.material.dispose();
+        }
+      });
+    }
+  }
+
+  function addLandmarks(flat) {
+    landmarkDots().forEach(function (lm) {
+      var s = new THREE.Mesh(
+        new THREE.SphereGeometry(0.06, 10, 8),
+        new THREE.MeshBasicMaterial({ color: lm.c })
+      );
+      s.position.set(lm.u * W * 0.5, lm.v * H, flat ? 0.02 : DP * 0.4);
+      stepRoot.add(s);
+    });
+  }
+
+  function addUVGrid() {
+    var pts = [], i, j, n = 10;
+    for (j = 0; j <= n; j++) {
+      var row = [];
+      for (i = 0; i <= n; i++) {
+        row.push([(i / n * 2 - 1) * W * 0.5, (j / n) * H, 0]);
+      }
+      for (i = 0; i < n; i++) {
+        pts.push(row[i], row[i + 1]);
+      }
+    }
+    for (i = 0; i <= n; i++) {
+      for (j = 0; j < n; j++) {
+        pts.push(
+          [(i / n * 2 - 1) * W * 0.5, (j / n) * H, 0],
+          [(i / n * 2 - 1) * W * 0.5, ((j + 1) / n) * H, 0]
+        );
+      }
+    }
+    var arr = [];
+    for (i = 0; i < pts.length; i++) arr.push(pts[i][0], pts[i][1], pts[i][2]);
+    var g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3));
+    stepRoot.add(lines(g, 0x5a6a78, 0.5));
+  }
+
+  function showFace(featFlags, color, opacity, extra) {
+    setFeat(featFlags);
+    var field = buildField();
+    stepRoot.add(lines(wireFromField(field, extra || {}), color, opacity));
+    return field;
+  }
+
+  function showStep(idx) {
+    clearStep();
+    var step = STEPS[idx];
+    var all = {
+      mass: 1, ear: 1, brow: 1, eye: 1, nose: 1, mouth: 1, diadem: 1, weather: 1
+    };
+
+    switch (step.id) {
+      case 'uv':
+        addUVGrid();
+        addLandmarks(true);
+        stepRoot.add(lines(lineGeo(outlineMask(), true), 0x7ec8e3, 0.7));
+        break;
+      case 'mask':
+        addUVGrid();
+        stepRoot.add(lines(lineGeo(outlineMask(), true), 0x7ec8e3, 0.95));
+        // fill hint: sample interior points
+        (function () {
+          var i, j;
+          for (j = 0; j <= 24; j++) {
+            for (i = 0; i <= 20; i++) {
+              var u = i / 20 * 2 - 1, v = j / 24;
+              if (faceMask(u, v) <= 0) continue;
+              var s = new THREE.Mesh(
+                new THREE.SphereGeometry(0.025, 4, 3),
+                new THREE.MeshBasicMaterial({ color: 0x3a6070 })
+              );
+              s.position.set(u * W * 0.5, v * H, 0);
+              stepRoot.add(s);
+            }
+          }
+        })();
+        break;
+      case 'mass':
+        showFace({ mass: 1, ear: 1 }, 0x9ad7a0, 0.9);
+        break;
+      case 'brow_eye':
+        showFace({ mass: 1, ear: 1, brow: 1, eye: 1 }, 0xf0a070, 0.88);
+        break;
+      case 'nose_mouth':
+        showFace({ mass: 1, ear: 1, brow: 1, eye: 1, nose: 1, mouth: 1 }, 0xe8b4a0, 0.9);
+        break;
+      case 'full':
+        showFace(all, 0xe8c27a, 0.88);
+        break;
+      case 'mesh':
+        showFace(all, 0x7ec8e3, 0.75);
+        addLandmarks(false);
+        break;
+      case 'cav': {
+        var f = showFace(all, 0x3a4550, 0.25);
+        stepRoot.add(lines(wireFromField(f, { cavThresh: 0.012 }), 0xd4a5e8, 0.95));
+        break;
+      }
+      case 'paint': {
+        var f2 = showFace(all, 0xc4b49a, 0.55);
+        stepRoot.add(lines(wireFromField(f2, { mossOnly: true }), 0x6a9a5a, 0.9));
+        // crown boxes hint
+        var crown = new THREE.Mesh(
+          new THREE.BoxGeometry(W * 0.55, H * 0.075, DP * 0.7),
+          new THREE.MeshBasicMaterial({ color: 0xb0a890, wireframe: true })
+        );
+        crown.position.set(0, H * 0.995, DP * 0.55);
+        stepRoot.add(crown);
+        break;
+      }
+    }
+
+    document.getElementById('hudTitle').textContent = step.title;
+    document.getElementById('hudDesc').textContent = step.hud;
+    document.querySelectorAll('.step-list li').forEach(function (li, i) {
+      li.classList.toggle('active', i === idx);
+    });
+    document.getElementById('btnPrev').disabled = idx <= 0;
+    document.getElementById('btnNext').disabled = idx >= STEPS.length - 1;
+  }
+
+  var list = document.getElementById('steps');
+  STEPS.forEach(function (s, i) {
+    var li = document.createElement('li');
+    li.innerHTML =
+      '<div><span class="n">' + (i + 1) + '</span><span class="title">' +
+      s.title.replace(/^[①-⑨]\s*/, '') + '</span></div>' +
+      '<div class="blurb">' + s.blurb +
+      '<div class="formula">' + s.formula + '</div></div>';
+    li.addEventListener('click', function () {
+      cur = i; stopPlay(); showStep(cur);
+    });
+    list.appendChild(li);
+  });
+
+  var cur = 0, playTimer = null;
+  function stopPlay() {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    document.getElementById('btnPlay').textContent = '自动播放';
+  }
+  document.getElementById('btnPrev').addEventListener('click', function () {
+    stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+  });
+  document.getElementById('btnNext').addEventListener('click', function () {
+    stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+  });
+  document.getElementById('btnPlay').addEventListener('click', function () {
+    if (playTimer) { stopPlay(); return; }
+    document.getElementById('btnPlay').textContent = '停止';
+    playTimer = setInterval(function () {
+      if (cur >= STEPS.length - 1) cur = 0; else cur++;
+      showStep(cur);
+    }, 2800);
+  });
+  document.getElementById('btnReset').addEventListener('click', function () {
+    orbit.target.copy(DEFAULT_CAMERA.target);
+    orbit.spherical.set(
+      DEFAULT_CAMERA.radius,
+      DEFAULT_CAMERA.phi,
+      DEFAULT_CAMERA.theta
+    );
+    syncCam();
+  });
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') {
+      e.preventDefault();
+      stopPlay(); if (cur < STEPS.length - 1) { cur++; showStep(cur); }
+    } else if (e.key === 'ArrowLeft') {
+      stopPlay(); if (cur > 0) { cur--; showStep(cur); }
+    }
+  });
+
+  function resize() {
+    var w = viewport.clientWidth, h = viewport.clientHeight;
+    if (w < 1 || h < 1) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h, false);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  showStep(0);
+
+  (function loop() {
+    requestAnimationFrame(loop);
+    if (!orbit.dragging && !playTimer) {
+      orbit.spherical.theta += 0.0008;
+      syncCam();
+    }
+    renderer.render(scene, camera);
+  })();
+})();
+</script>
+</body>
+</html>
