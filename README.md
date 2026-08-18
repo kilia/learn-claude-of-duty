@@ -1,6 +1,6 @@
 # 算法即场景：学习 Claude-of-Duty
 
-## 在线阅读：[网页版讲义](https://kilia.github.io/learn-claude-of-duty/)（含演讲实录与交互演示）
+## 在线阅读：[交互式PPT](https://kilia.github.io/learn-claude-of-duty/)（含演讲实录与交互演示）
 
 [![算法即场景 · 从零资产到可玩的世界](images/slide01-1.webp)](https://kilia.github.io/learn-claude-of-duty/)
 
