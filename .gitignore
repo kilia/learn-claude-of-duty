@@ -18,6 +18,3 @@ Desktop.ini
 # Env
 .env
 .env.*
-
-# GitHub Pages
-.nojekyll
