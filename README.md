@@ -1,4 +1,4 @@
-# 算法即场景：学习 Claude-of-Duty
+# 算法即场景：学习 Claude-of-Duty 的 PCG 算法
 
 ## 在线阅读：[交互式PPT](https://kilia.github.io/learn-claude-of-duty/)（含演讲实录与交互演示）
 
