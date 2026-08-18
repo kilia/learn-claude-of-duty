@@ -2,7 +2,7 @@
 
 ## 在线阅读：[网页版讲义](https://kilia.github.io/learn-claude-of-duty/)（含演讲实录与交互演示）
 
-![算法即场景 · 从零资产到可玩的世界](images/slide01-1.webp)
+[![算法即场景 · 从零资产到可玩的世界](images/slide01-1.webp)](https://kilia.github.io/learn-claude-of-duty/)
 
 本仓库是引擎 PCG 团队学习 [Claude-of-Duty](https://github.com/mshumer/Claude-of-Duty) 的技术分享。整个分享基于 TA 同学 kelvin 对 Claude-of-Duty 的完整复刻经验（[operation-blackout](https://github.com/kelvincai522/operation-blackout)），以及对[生成过程](docs/OPERATION%20BLACKOUT%20项目解析.md)、生成算法（[几何](docs/几何生成算法.md)、[贴图](docs/贴图生成算法.md)）、[Build-Critic-Fix 审查流程](docs/创造-审查-修复循环.md)、[单一随机数种子](docs/单个SEED生成整个场景.md)等各项内容的调研和思考。另有与《无人深空》的 [PCG 对比分析](docs/OPUS%205%20PCG与《无人深空》PCG详细对比分析报告.md)。
 
